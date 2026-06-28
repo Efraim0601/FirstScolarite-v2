@@ -5,7 +5,7 @@
 	email ${SSL_EMAIL}
 }
 
-firstsign.afbdei.com {
+${DOMAIN} {
 	encode gzip zstd
 
 	# Webhooks TrustPayWay (payment-service)

@@ -13,6 +13,7 @@ services:
     restart: unless-stopped
 
   postgres-replica:
+    profiles: ["read-replica"]
     restart: unless-stopped
 
   pgbouncer:
@@ -35,6 +36,8 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://firstsign.afbdei.com}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis dans .env}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+      TENANT_FALLBACK_ENABLED: "false"
       TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
     restart: unless-stopped
 
@@ -52,6 +55,7 @@ services:
       DB_USER: ${DB_USER:-firstpay}
       DB_PASS: ${DB_PASS}
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
       TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
     restart: unless-stopped
 
@@ -59,6 +63,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       PAYMENT_WEBHOOK_BASE: ${PAYMENT_WEBHOOK_BASE:-https://firstsign.afbdei.com/webhooks/trustpayway}
+      PAYMENT_SIMULATION_ENABLED: ${PAYMENT_SIMULATION_ENABLED:-false}
       TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
     restart: unless-stopped
 
@@ -67,7 +72,16 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       DB_USER: ${DB_USER:-firstpay}
       DB_PASS: ${DB_PASS}
+      # VPS mono-nœud : pas de réplica — lectures sur le primaire
+      READ_DB_URL: r2dbc:postgresql://postgres:5432/firstpay
       TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      kafka:
+        condition: service_started
+      transaction-service:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:

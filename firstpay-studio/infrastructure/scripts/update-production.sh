@@ -16,7 +16,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-GIT_BRANCH="${GIT_BRANCH:-main}"
+GIT_BRANCH="${GIT_BRANCH:-master}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/firstpay}"
 
 log() { echo "[update] $*"; }
@@ -62,7 +62,15 @@ git_pull() {
 rebuild_stack() {
   render_caddyfile
   log "Rebuild et redémarrage des conteneurs…"
-  ${COMPOSE} build --parallel
+  local attempt=1
+  until ${COMPOSE} build --parallel; do
+    if [[ $attempt -ge 3 ]]; then
+      die "Build Docker échoué après 3 tentatives."
+    fi
+    log "Build échoué — nouvelle tentative ($((attempt + 1))/3) dans 15 s…"
+    sleep 15
+    attempt=$((attempt + 1))
+  done
   ${COMPOSE} up -d --remove-orphans
   log "Nettoyage des images Docker inutilisées…"
   docker image prune -f >/dev/null 2>&1 || true

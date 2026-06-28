@@ -1,7 +1,7 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .
-RUN mvn -q -pl services/partner-service -am -DskipTests package
+RUN mvn -q -pl services/partner-service -am -Dmaven.test.skip=true package
 # Run
 FROM eclipse-temurin:21-jre
 WORKDIR /app

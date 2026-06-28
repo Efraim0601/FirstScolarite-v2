@@ -68,8 +68,10 @@ ensure_env_file() {
     cp .env.production.example .env
     JWT=$(openssl rand -base64 48 | tr -d '\n')
     DBP=$(openssl rand -base64 32 | tr -d '\n')
+    ITK=$(openssl rand -base64 32 | tr -d '\n')
     sed -i "s|JWT_SECRET=.*|JWT_SECRET=${JWT}|" .env
     sed -i "s|DB_PASS=.*|DB_PASS=${DBP}|" .env
+    sed -i "s|INTERNAL_TOKEN=.*|INTERNAL_TOKEN=${ITK}|" .env
     sed -i "s|DOMAIN=.*|DOMAIN=${DOMAIN}|" .env
     sed -i "s|SSL_EMAIL=.*|SSL_EMAIL=${SSL_EMAIL}|" .env
     sed -i "s|FRONTEND_ORIGIN=.*|FRONTEND_ORIGIN=https://${DOMAIN}|" .env
@@ -78,8 +80,19 @@ ensure_env_file() {
   fi
   # shellcheck disable=SC1091
   set -a && source .env && set +a
+  if [[ -z "${INTERNAL_TOKEN:-}" || "${INTERNAL_TOKEN}" == REMPLACER* ]]; then
+    ITK=$(openssl rand -base64 32 | tr -d '\n')
+    if grep -q '^INTERNAL_TOKEN=' .env 2>/dev/null; then
+      sed -i "s|^INTERNAL_TOKEN=.*|INTERNAL_TOKEN=${ITK}|" .env
+    else
+      echo "INTERNAL_TOKEN=${ITK}" >> .env
+    fi
+    set -a && source .env && set +a
+    log "INTERNAL_TOKEN généré/mis à jour dans .env"
+  fi
   [[ -n "${JWT_SECRET:-}" && "${#JWT_SECRET}" -ge 32 ]] || die "JWT_SECRET trop court dans .env (min. 32 caractères)"
   [[ -n "${DB_PASS:-}" ]] || die "DB_PASS manquant dans .env"
+  [[ -n "${INTERNAL_TOKEN:-}" ]] || die "INTERNAL_TOKEN manquant dans .env"
   DOMAIN="${DOMAIN:-firstsign.afbdei.com}"
   SSL_EMAIL="${SSL_EMAIL:-admin@afbdei.com}"
 }
@@ -100,8 +113,12 @@ check_dns() {
     if [[ -n "${RESOLVED}" && -n "${PUBLIC_IP}" && "${RESOLVED}" != "${PUBLIC_IP}" ]]; then
       log "ATTENTION : ${DOMAIN} → ${RESOLVED}, IP serveur → ${PUBLIC_IP}"
       log "Le certificat SSL Let's Encrypt échouera si le DNS ne pointe pas vers ce serveur."
-      read -r -p "Continuer quand même ? [y/N] " ans
-      [[ "${ans:-N}" =~ ^[Yy]$ ]] || exit 1
+      if [[ -t 0 ]]; then
+        read -r -p "Continuer quand même ? [y/N] " ans
+        [[ "${ans:-N}" =~ ^[Yy]$ ]] || exit 1
+      else
+        log "Mode non interactif — poursuite automatique."
+      fi
     else
       log "DNS OK (${DOMAIN} → ${RESOLVED:-?})"
     fi
@@ -112,9 +129,17 @@ check_dns() {
 
 build_and_start() {
   log "Build des images (peut prendre 15–30 min au premier déploiement)…"
-  ${COMPOSE} build --parallel
+  local attempt=1
+  until ${COMPOSE} build --parallel; do
+    if [[ $attempt -ge 3 ]]; then
+      die "Build Docker échoué après 3 tentatives (réseau Maven instable ?). Relancez le script."
+    fi
+    log "Build échoué — nouvelle tentative ($((attempt + 1))/3) dans 15 s…"
+    sleep 15
+    attempt=$((attempt + 1))
+  done
 
-  log "Démarrage de la stack…"
+  log "Démarrage de la stack (sans réplica Postgres — VPS mono-nœud)…"
   ${COMPOSE} up -d
 
   log "Attente du service transaction-service (max 3 min)…"
