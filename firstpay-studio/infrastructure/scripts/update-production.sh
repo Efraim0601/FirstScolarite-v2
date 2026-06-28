@@ -16,9 +16,22 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
-COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yml -f docker-compose.prod.yml"
+REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
 GIT_BRANCH="${GIT_BRANCH:-master}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/firstpay}"
+
+compose_files() {
+  echo "-f docker-compose.yml -f docker-compose.prod.yml"
+  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+    echo "-f docker-compose.nginx-prod.yml"
+  fi
+}
+
+refresh_compose() {
+  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_files | tr '\n' ' ')"
+}
+
+refresh_compose
 
 log() { echo "[update] $*"; }
 die() { echo "[update] ERREUR: $*" >&2; exit 1; }
@@ -26,7 +39,13 @@ die() { echo "[update] ERREUR: $*" >&2; exit 1; }
 [[ -f .env ]] || die "Fichier .env absent. Lancez d'abord deploy-production.sh"
 # shellcheck disable=SC1091
 set -a && source .env && set +a
-DOMAIN="${DOMAIN:-firstsign.afbdei.com}"
+REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+refresh_compose
+DOMAIN="${DOMAIN:-esign.afbdei.com}"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/public-url.sh"
+warn_domain_origin_mismatch
+PUBLIC_BASE_URL="$(public_base_url)"
 
 render_caddyfile() {
   export DOMAIN SSL_EMAIL="${SSL_EMAIL:-admin@afbdei.com}"
@@ -36,6 +55,10 @@ render_caddyfile() {
 }
 
 ensure_reverse_proxy_ports() {
+  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+    log "Mode nginx hôte — conservation de nginx sur 80/443."
+    return 0
+  fi
   # shellcheck disable=SC1091
   source "${SCRIPT_DIR}/lib/ensure-ports.sh"
   ensure_reverse_proxy_ports
@@ -67,9 +90,9 @@ git_pull() {
 }
 
 rebuild_stack() {
-  render_caddyfile
-  # shellcheck disable=SC1091
-  source "${SCRIPT_DIR}/lib/ensure-ports.sh"
+  if [[ "${REVERSE_PROXY}" != "nginx" ]]; then
+    render_caddyfile
+  fi
   ensure_reverse_proxy_ports
   log "Rebuild et redémarrage des conteneurs…"
   local attempt=1
@@ -100,11 +123,11 @@ main() {
   sleep 30
 
   if [[ -x infrastructure/scripts/verify-production.sh ]]; then
-    GATEWAY_URL="https://${DOMAIN}" FRONTEND_URL="https://${DOMAIN}" \
+    GATEWAY_URL="${PUBLIC_BASE_URL}" FRONTEND_URL="${PUBLIC_BASE_URL}" \
       infrastructure/scripts/verify-production.sh
   fi
 
-  log "Mise à jour terminée — https://${DOMAIN}"
+  log "Mise à jour terminée — ${PUBLIC_BASE_URL}"
 }
 
 main "$@"

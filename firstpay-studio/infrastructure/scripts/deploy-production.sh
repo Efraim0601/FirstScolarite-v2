@@ -4,7 +4,7 @@
 # Prérequis serveur :
 #   - Ubuntu 22.04+ / Debian 12+
 #   - Docker Engine + Compose plugin
-#   - DNS : firstsign.afbdei.com → IP publique du serveur
+#   - DNS : esign.afbdei.com → IP publique du serveur
 #   - Ports 80 et 443 ouverts (pare-feu + cloud security group)
 #
 # Usage (depuis la racine du dépôt cloné sur le serveur) :
@@ -15,17 +15,32 @@
 #   DEPLOY_DIR=/opt/firstpay-studio  — répertoire cible si clone automatique
 #   SKIP_CLONE=1                     — ne pas cloner (déjà dans le repo)
 #   GIT_REPO=git@github.com:org/firstpay-studio.git
+#   REVERSE_PROXY=nginx              — nginx hôte + Certbot (ports 14200/18080), sans Caddy
+#   REVERSE_PROXY=caddy              — Caddy sur 80/443 (défaut)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/firstpay-studio}"
-DOMAIN="${DOMAIN:-firstsign.afbdei.com}"
+DOMAIN="${DOMAIN:-esign.afbdei.com}"
 SSL_EMAIL="${SSL_EMAIL:-admin@afbdei.com}"
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
-COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yml -f docker-compose.prod.yml"
+REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+
+compose_files() {
+  echo "-f docker-compose.yml -f docker-compose.prod.yml"
+  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+    echo "-f docker-compose.nginx-prod.yml"
+  fi
+}
+
+refresh_compose() {
+  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_files | tr '\n' ' ')"
+}
+
+refresh_compose
 
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] ERREUR: $*" >&2; exit 1; }
@@ -64,6 +79,7 @@ ensure_project_tree() {
 }
 
 ensure_env_file() {
+  local reverse_proxy_cli="${REVERSE_PROXY:-}"
   if [[ ! -f .env ]]; then
     log "Création de .env depuis .env.production.example…"
     cp .env.production.example .env
@@ -77,10 +93,19 @@ ensure_env_file() {
     sed -i "s|SSL_EMAIL=.*|SSL_EMAIL=${SSL_EMAIL}|" .env
     sed -i "s|FRONTEND_ORIGIN=.*|FRONTEND_ORIGIN=https://${DOMAIN}|" .env
     sed -i "s|PAYMENT_WEBHOOK_BASE=.*|PAYMENT_WEBHOOK_BASE=https://${DOMAIN}/webhooks/trustpayway|" .env
+    if [[ -n "${reverse_proxy_cli}" ]]; then
+      sed -i "s|REVERSE_PROXY=.*|REVERSE_PROXY=${reverse_proxy_cli}|" .env
+    fi
     log "Secrets générés automatiquement dans .env — sauvegardez ce fichier en lieu sûr."
   fi
   # shellcheck disable=SC1091
   set -a && source .env && set +a
+  if [[ -n "${reverse_proxy_cli}" ]]; then
+    REVERSE_PROXY="${reverse_proxy_cli}"
+  else
+    REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+  fi
+  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_files | tr '\n' ' ')"
   if [[ -z "${INTERNAL_TOKEN:-}" || "${INTERNAL_TOKEN}" == REMPLACER* ]]; then
     ITK=$(openssl rand -base64 32 | tr -d '\n')
     if grep -q '^INTERNAL_TOKEN=' .env 2>/dev/null; then
@@ -94,8 +119,12 @@ ensure_env_file() {
   [[ -n "${JWT_SECRET:-}" && "${#JWT_SECRET}" -ge 32 ]] || die "JWT_SECRET trop court dans .env (min. 32 caractères)"
   [[ -n "${DB_PASS:-}" ]] || die "DB_PASS manquant dans .env"
   [[ -n "${INTERNAL_TOKEN:-}" ]] || die "INTERNAL_TOKEN manquant dans .env"
-  DOMAIN="${DOMAIN:-firstsign.afbdei.com}"
+  DOMAIN="${DOMAIN:-esign.afbdei.com}"
   SSL_EMAIL="${SSL_EMAIL:-admin@afbdei.com}"
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/lib/public-url.sh"
+  warn_domain_origin_mismatch
+  PUBLIC_BASE_URL="$(public_base_url)"
 }
 
 render_caddyfile() {
@@ -107,6 +136,10 @@ render_caddyfile() {
 }
 
 ensure_reverse_proxy_ports() {
+  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+    log "Mode nginx hôte — conservation de nginx sur 80/443 (pas de libération de ports)."
+    return 0
+  fi
   # shellcheck disable=SC1091
   source "${SCRIPT_DIR}/lib/ensure-ports.sh"
   ensure_reverse_proxy_ports
@@ -174,14 +207,22 @@ build_and_start() {
 }
 
 post_deploy_info() {
+  local base="${PUBLIC_BASE_URL:-$(public_base_url 2>/dev/null || echo "https://${DOMAIN}")}"
+  local local_hint=""
+  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+    local_hint="
+║  Docker (local) : http://127.0.0.1:${NGINX_FRONTEND_PORT:-14200}
+║  Config nginx   : infrastructure/nginx/esign.afbdei.com.conf"
+  fi
   cat <<EOF
 
 ╔══════════════════════════════════════════════════════════════════╗
 ║  FirstPay Studio — déploiement terminé                           ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  Application : https://${DOMAIN}
-║  API         : https://${DOMAIN}/api/v1/
-║  Webhooks    : https://${DOMAIN}/webhooks/trustpayway/{network}
+║  Application : ${base}
+║  API         : ${base}/api/v1/
+║  Webhooks    : ${base}/webhooks/trustpayway/{network}
+${local_hint}
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Vérification :
 ║    ./infrastructure/scripts/verify-production.sh
@@ -207,12 +248,17 @@ main() {
   install_docker_if_missing
   ensure_project_tree
   ensure_env_file
-  render_caddyfile
+  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+    log "Mode REVERSE_PROXY=nginx — Caddy désactivé, frontend sur 127.0.0.1:${NGINX_FRONTEND_PORT:-14200}"
+  else
+    render_caddyfile
+  fi
   check_dns
   build_and_start
 
   if [[ -x infrastructure/scripts/verify-production.sh ]]; then
-    DOMAIN="${DOMAIN}" GATEWAY_URL="https://${DOMAIN}" FRONTEND_URL="https://${DOMAIN}" \
+    PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-$(public_base_url)}"
+    DOMAIN="${DOMAIN}" GATEWAY_URL="${PUBLIC_BASE_URL}" FRONTEND_URL="${PUBLIC_BASE_URL}" \
       infrastructure/scripts/verify-production.sh || log "Vérification partielle — relancez verify-production.sh dans 2 min."
   fi
 

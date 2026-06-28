@@ -1,0 +1,24 @@
+# Overlay production — nginx hôte (Certbot sur le serveur, pas Caddy).
+#
+#   docker compose -p firstpay-studio \
+#     -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.nginx-prod.yml up -d --build
+#
+# Ou : sudo REVERSE_PROXY=nginx ./infrastructure/scripts/deploy-production.sh
+#
+# Ports écoutés uniquement en local (127.0.0.1) — le nginx du serveur fait le SSL public.
+
+services:
+  api-gateway:
+    ports:
+      - "127.0.0.1:${NGINX_GATEWAY_PORT:-18080}:8080"
+
+  frontend:
+    ports:
+      - "127.0.0.1:${NGINX_FRONTEND_PORT:-14200}:80"
+
+  payer-frontend:
+    ports:
+      - "127.0.0.1:${NGINX_PAYER_PORT:-14300}:80"
+
+  caddy:
+    profiles: ["caddy-only"]

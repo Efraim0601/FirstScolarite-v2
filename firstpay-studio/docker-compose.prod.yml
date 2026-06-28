@@ -2,7 +2,8 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Variables lues depuis .env (voir .env.production.example).
-# Seuls Caddy (80/443) est exposé publiquement.
+# Seul Caddy est exposé publiquement (ports configurables via CADDY_HTTP_PORT / CADDY_HTTPS_PORT).
+# Let's Encrypt HTTP-01 exige que CADDY_HTTP_PORT soit 80 sauf challenge DNS.
 
 services:
   postgres:
@@ -30,7 +31,7 @@ services:
     ports: []
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://firstsign.afbdei.com}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://esign.afbdei.com}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis dans .env}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
       TENANT_FALLBACK_ENABLED: "false"
@@ -58,7 +59,7 @@ services:
   payment-service:
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      PAYMENT_WEBHOOK_BASE: ${PAYMENT_WEBHOOK_BASE:-https://firstsign.afbdei.com/webhooks/trustpayway}
+      PAYMENT_WEBHOOK_BASE: ${PAYMENT_WEBHOOK_BASE:-https://esign.afbdei.com/webhooks/trustpayway}
       PAYMENT_SIMULATION_ENABLED: ${PAYMENT_SIMULATION_ENABLED:-false}
       TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
     restart: unless-stopped
@@ -84,12 +85,16 @@ services:
     ports: []
     restart: unless-stopped
 
+  payer-frontend:
+    ports: []
+    restart: unless-stopped
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
     volumes:
       - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

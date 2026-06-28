@@ -2,16 +2,23 @@
 # Smoke test post-déploiement production (HTTPS).
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-firstsign.afbdei.com}"
-GATEWAY="${GATEWAY_URL:-https://${DOMAIN}}"
-FRONTEND="${FRONTEND_URL:-https://${DOMAIN}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/public-url.sh"
+
+DOMAIN="${DOMAIN:-esign.afbdei.com}"
+BASE="$(public_base_url)"
+GATEWAY="${GATEWAY_URL:-${BASE}}"
+FRONTEND="${FRONTEND_URL:-${BASE}}"
+# Certificat SSL : nom d'hôte depuis FRONTEND_ORIGIN ou DOMAIN
+SSL_HOST="$(echo "${BASE}" | sed -E 's|https?://||' | cut -d/ -f1)"
 
 echo "==> Certificat SSL"
-echo | openssl s_client -connect "${DOMAIN}:443" -servername "${DOMAIN}" 2>/dev/null \
+echo | openssl s_client -connect "${SSL_HOST}:443" -servername "${SSL_HOST}" 2>/dev/null \
   | openssl x509 -noout -subject -dates 2>/dev/null || echo "WARN: impossible de lire le certificat"
 
 echo "==> Redirection HTTPS"
-curl -sfI "http://${DOMAIN}/" | head -5
+curl -sfI "http://${SSL_HOST}/" | head -5
 
 echo "==> Frontend (HTTPS)"
 curl -sf -o /dev/null -w "HTTP %{http_code}\n" "${FRONTEND}/"
