@@ -201,6 +201,23 @@ public class PartnerStore {
 
     public record TenantResolution(String id, String code, String name, int rateLimitTpm) {}
 
+    /** Tenant actif par identifiant (délégation banque → partenaire). */
+    public Mono<TenantResolution> findActiveTenant(UUID tenantId) {
+        return db.sql("""
+                SELECT id, code, name, rate_limit_tpm
+                FROM tenants
+                WHERE id = :id AND status = 'ACTIVE'
+                LIMIT 1
+                """)
+            .bind("id", tenantId)
+            .map(r -> new TenantResolution(
+                r.get("id", UUID.class).toString(),
+                r.get("code", String.class),
+                r.get("name", String.class),
+                r.get("rate_limit_tpm", Integer.class)
+            )).one();
+    }
+
     public Flux<UserDto> listUsers(UUID tenantId) {
         return db.sql("SELECT * FROM partner_users WHERE tenant_id = :t ORDER BY created_at")
             .bind("t", tenantId)

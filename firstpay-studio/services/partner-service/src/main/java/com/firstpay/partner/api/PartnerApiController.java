@@ -4,6 +4,7 @@ import com.firstpay.partner.api.dto.Dtos.*;
 import com.firstpay.partner.infra.EmailService;
 import com.firstpay.partner.infra.InterfaceStore;
 import com.firstpay.partner.infra.PartnerStore;
+import com.firstpay.security.JwtService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -19,11 +20,14 @@ public class PartnerApiController {
     private final InterfaceStore interfaces;
     private final PartnerStore partners;
     private final EmailService email;
+    private final JwtService jwt;
 
-    public PartnerApiController(InterfaceStore interfaces, PartnerStore partners, EmailService email) {
+    public PartnerApiController(InterfaceStore interfaces, PartnerStore partners,
+                                EmailService email, JwtService jwt) {
         this.interfaces = interfaces;
         this.partners = partners;
         this.email = email;
+        this.jwt = jwt;
     }
 
     @GetMapping("/api/v1/partners")
@@ -52,6 +56,36 @@ public class PartnerApiController {
             .flatMap(res -> email.sendConnectionEmail(
                     res.adminEmail(), req.adminName(), res.partner().name(), res.tempPassword())
                 .thenReturn(res));
+    }
+
+    public record ImpersonateResponse(String token, String tenantId, String partner,
+                                      String code, String shortCode, String sector, String tokenType) {}
+
+    /**
+     * Émet un JWT de délégation (partner_admin) pour qu'un bank_admin ouvre le portail
+     * partenaire sans connaître l'API-key M2M.
+     */
+    @PostMapping("/api/v1/partners/{tenantId}/impersonate")
+    public Mono<ImpersonateResponse> impersonate(
+            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestHeader(value = "X-User", required = false) String actorEmail,
+            @PathVariable UUID tenantId) {
+        if (!"bank_admin".equals(role) && !"bank_cashier".equals(role)) {
+            return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Seul le personnel banque peut déléguer sur un partenaire"));
+        }
+        String subject = actorEmail != null && !actorEmail.isBlank() ? actorEmail : "bank_admin";
+        return partners.findActiveTenant(tenantId)
+            .flatMap(t -> partners.listPartners()
+                .filter(p -> p.id().equals(t.id()))
+                .next()
+                .defaultIfEmpty(new PartnerDto(t.id(), t.code(), "", t.name(), "", "ACTIVE", 0))
+                .map(p -> {
+                    String token = jwt.issue(subject, t.id(), "partner_admin", t.name());
+                    return new ImpersonateResponse(token, t.id(), t.name(), t.code(),
+                        p.shortCode(), p.sector(), "Bearer");
+                }))
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Partenaire introuvable")));
     }
 
     @GetMapping("/api/v1/interfaces")

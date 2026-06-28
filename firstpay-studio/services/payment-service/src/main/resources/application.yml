@@ -56,6 +56,17 @@ firstpay:
   payment:
     webhook-base: ${PAYMENT_WEBHOOK_BASE:http://localhost:18080/webhooks/trustpayway}
     reconcile-interval-ms: ${PAYMENT_RECONCILE_MS:30000}
+    simulation-enabled: ${PAYMENT_SIMULATION_ENABLED:false}
+    acquirer:
+      enabled: ${ACQUIRER_ENABLED:false}
+      base-url: ${ACQUIRER_BASE_URL:}
+      api-key: ${ACQUIRER_API_KEY:}
+      charge-path: ${ACQUIRER_CHARGE_PATH:/api/v1/charges}
+    rtgs:
+      enabled: ${RTGS_ENABLED:false}
+      base-url: ${RTGS_BASE_URL:}
+      api-key: ${RTGS_API_KEY:}
+      transfer-path: ${RTGS_TRANSFER_PATH:/api/v1/transfers}
 
 management:
   endpoints:

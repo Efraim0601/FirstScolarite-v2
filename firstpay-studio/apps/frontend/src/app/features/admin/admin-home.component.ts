@@ -50,7 +50,7 @@ export class AdminHomeComponent implements OnInit, OnDestroy {
 
   private liveSub?: Subscription;
   readonly liveTpm = signal<number | null>(null);
-  readonly stats = signal({ totalTx: 3847, amount: 124_000_000, rate: 94.1, failed: 12 });
+  readonly stats = signal({ totalTx: 0, amount: 0, rate: 0, failed: 0 });
 
   readonly modules = [
     { route: 'partners', color: '#E53935', glyph: '🏢', title: 'Partenaires',

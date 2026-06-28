@@ -51,5 +51,38 @@ public final class Dtos {
 
     public record UserDto(String id, String name, String email, String role, String status) {}
 
+    /** Marque du commerçant exposée à la page payeur publique (rien de sensible). */
+    public record PublicMerchantDto(String name, String shortCode, String logoUrl, String brandColor) {}
+
+    /**
+     * Vue PUBLIQUE d'une interface de paiement, servie sans authentification à la page payeur
+     * (`pay.firstpay.cm/{shortCode}/{slug}`). Ne contient QUE ce que le payeur doit voir :
+     * pas de tenantId, pas de compteurs (tx/collected), pas de QR internes, pas de statut.
+     * N'est renvoyée que pour une interface `status = actif` d'un tenant `ACTIVE`.
+     */
+    public record PublicCheckoutDto(
+        String interfaceId, String name, String description, String sector, String slug,
+        String amountType, String fixedAmount, String minAmount, String maxAmount, String currency,
+        List<PresetDto> presets, boolean multiSelect, String refType, String refLabel, String refFormat,
+        List<InterfaceFieldDto> customFields, Map<String, Boolean> methods, PublicMerchantDto merchant
+    ) {}
+
+    /**
+     * Requête d'initiation de paiement envoyée par la page payeur publique.
+     * `amount` est ignoré pour amountType=fixed ; `presetId` sert pour amountType=preset ;
+     * `fields` mappe l'ID de champ personnalisé → valeur saisie.
+     */
+    public record PublicPayRequest(
+        String method, String amount, String phone, String payer, Long presetId, Map<String, String> fields
+    ) {}
+
+    /** Réponse d'initiation : la transaction est créée (PENDING) côté plateforme. */
+    public record PublicPayResponse(String transactionId, String reference, String status) {}
+
+    /** Statut public d'une transaction (polling par la page payeur). */
+    public record PublicTxStatusDto(
+        String transactionId, String reference, String status, String amount, String currency, String method
+    ) {}
+
     public record SettingsDto(String tenantId, String logoUrl, String logoName, String brandColor, Map<String, Object> notifications) {}
 }

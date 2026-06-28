@@ -4,6 +4,7 @@ import { Subscription } from 'rxjs';
 import { StudioStore } from '../studio/studio.store';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
 import { ReportingApiService } from '../../core/api/reporting-api.service';
+import { UsersStore } from '../users/users.store';
 import { StatCardComponent } from '../../shared/components/stat-card.component';
 import { PanelComponent } from '../../shared/components/panel.component';
 
@@ -96,6 +97,7 @@ import { PanelComponent } from '../../shared/components/panel.component';
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   readonly store = inject(StudioStore);
+  readonly usersStore = inject(UsersStore);
   private readonly tenant = inject(TenantContextService);
   private readonly router = inject(Router);
   private readonly reporting = inject(ReportingApiService);
@@ -109,6 +111,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.store.loadFromApi();
+    this.usersStore.loadFromApi();
     this.reporting.summary().subscribe((s) => {
       if (s) this.apiSummary.set(s);
     });
@@ -153,7 +156,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       metric: () => this.fr(this.store.transactions().length),
       desc: 'Suivez tous les paiements globalement ou par interface. Filtres avancés et export CSV/Excel/JSON.', cta: "Voir l'historique" },
     { route: 'users', accent: '#7C3AED', glyph: '◑', title: 'Utilisateurs & rôles', metricLabel: 'Membres',
-      metric: () => 5,
+      metric: () => '' + this.usersStore.users().length,
       desc: 'Invitez votre équipe avec des rôles fins : administrateur, gestionnaire, comptable, lecture seule.', cta: "Gérer l'équipe" },
     { route: 'settings', accent: '#1F9D55', glyph: '⚙', title: 'Paramètres', metricLabel: 'Marque',
       metric: () => 'Configurée',

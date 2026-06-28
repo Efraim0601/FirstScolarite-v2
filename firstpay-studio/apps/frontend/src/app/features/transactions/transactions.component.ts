@@ -160,15 +160,15 @@ export class TransactionsComponent implements OnInit {
       this.txApi.getAll().subscribe({
         next: (rows) => {
           const mapped = this.mapApiRows(rows);
-          if (this.scope() === 'platform') this.platformTxs.set(mapped.length ? mapped : this.store.transactions());
+          if (this.scope() === 'platform') this.platformTxs.set(mapped);
           else {
             const uid = this.auth.user()?.id;
             this.cashierTxs.set(mapped.filter((t) => t.fields?.['cashierId'] === uid || t.reference.startsWith('CASH-')));
           }
         },
         error: () => {
-          if (this.scope() === 'platform') this.platformTxs.set(this.store.transactions());
-          else this.cashierTxs.set(this.store.transactions().filter((t) => t.reference.startsWith('CASH-')));
+          if (this.scope() === 'platform') this.platformTxs.set([]);
+          else this.cashierTxs.set([]);
         },
       });
     }

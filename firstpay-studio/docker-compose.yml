@@ -121,6 +121,8 @@ services:
       FRONTEND_ORIGIN: http://localhost:14200
       JWT_SECRET: ${JWT_SECRET:-firstpay-dev-secret-change-me-please-32b}
       PARTNER_SVC_URI: http://partner-service:8080
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-firstpay-dev-internal}
+      TENANT_FALLBACK_ENABLED: ${TENANT_FALLBACK_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACING_SAMPLE_RATE: "1.0"
     depends_on: [transaction-service, partner-service, redis]
@@ -154,6 +156,8 @@ services:
       DB_URL: r2dbc:postgresql://postgres:5432/firstpay
       JDBC_URL: jdbc:postgresql://postgres:5432/firstpay
       KAFKA_BROKERS: kafka:9092
+      TRANSACTION_SVC_URI: http://transaction-service:8080
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-firstpay-dev-internal}
       # baselineVersion=0 : schéma déjà peuplé par transaction-service, mais exécuter quand même V1+ partner
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
       SPRING_FLYWAY_BASELINE_VERSION: "0"
@@ -176,6 +180,7 @@ services:
       REDIS_URL: redis://redis:6379
       PARTNER_SVC_URI: http://partner-service:8080
       PAYMENT_WEBHOOK_BASE: ${PAYMENT_WEBHOOK_BASE:-http://localhost:18080/webhooks/trustpayway}
+      PAYMENT_SIMULATION_ENABLED: ${PAYMENT_SIMULATION_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACING_SAMPLE_RATE: "1.0"
     depends_on: [kafka, redis, partner-service]
@@ -210,6 +215,12 @@ services:
     ports: ["14200:80"]
     environment:
       API_URL: http://api-gateway:8080
+    depends_on: [api-gateway]
+
+  # Page payeur publique (lien/QR partagé) — app statique servie par nginx, proxy /public/ → gateway.
+  payer-frontend:
+    build: { context: ., dockerfile: apps/payer-frontend/Dockerfile }
+    ports: ["14300:80"]
     depends_on: [api-gateway]
 
   # ---- Observabilité (Phase 9) : `docker compose up -d prometheus grafana jaeger otel-collector` ----

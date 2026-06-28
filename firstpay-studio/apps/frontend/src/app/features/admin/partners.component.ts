@@ -1,12 +1,11 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { PARTNERS_DB, PartnerRecord } from '../../core/models/partner.model';
+import { PartnerRecord } from '../../core/models/partner.model';
 import { AuthService } from '../../core/auth/auth.service';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
 import { PartnerApiService } from '../../core/api/partner-api.service';
 import { AuditApiService } from '../../core/api/audit-api.service';
-import { apiKeyForPartner } from '../../core/auth/api-keys';
 
 interface Draft {
   name: string; sector: string; adminName: string; adminEmail: string;
@@ -136,7 +135,7 @@ export class PartnersComponent implements OnInit {
 
   readonly search = signal('');
   readonly sectors = SECTORS;
-  private readonly rows = signal<PartnerRecord[]>(PARTNERS_DB);
+  private readonly rows = signal<PartnerRecord[]>([]);
 
   readonly draft = signal<Draft | null>(null);
   readonly creating = signal(false);
@@ -144,17 +143,20 @@ export class PartnersComponent implements OnInit {
   readonly createdPassword = signal<string | null>(null);
   readonly copied = signal(false);
   readonly error = signal('');
+  readonly listError = signal('');
 
   ngOnInit() { this.reload(); }
 
   private reload() {
-    this.partnerApi.listPartners().subscribe((list) => {
-      if (list.length > 0) {
+    this.listError.set('');
+    this.partnerApi.listPartners().subscribe({
+      next: (list) => {
         this.rows.set(list.map((d) => ({
           name: d.name, code: d.code, shortCode: d.shortCode, sector: d.sector,
           interfaces: d.interfaceCount, active: d.status === 'ACTIVE', tenantId: d.id,
         })));
-      }
+      },
+      error: () => this.listError.set('Impossible de charger la liste des partenaires.'),
     });
   }
 
@@ -175,18 +177,22 @@ export class PartnersComponent implements OnInit {
     const d = this.draft();
     if (!d || !d.name.trim()) return;
     this.creating.set(true); this.error.set('');
-    this.partnerApi.createPartner(d).subscribe((res) => {
-      this.creating.set(false);
-      if (!res) { this.error.set("Échec de la création (droits insuffisants ou backend indisponible)."); return; }
-      // Ajoute le partenaire en tête de liste et affiche la clé API
-      const p = res.partner;
-      this.rows.set([{
-        name: p.name, code: p.code, shortCode: p.shortCode, sector: p.sector,
-        interfaces: p.interfaceCount, active: true, tenantId: p.id,
-      }, ...this.rows()]);
-      this.createdKey.set(res.apiKey);
-      this.createdPassword.set(res.tempPassword ?? '—');
-      this.audit.log('partner_create', 'partner', p.name, p.name, `Création du partenaire ${p.name}`).subscribe();
+    this.partnerApi.createPartner(d).subscribe({
+      next: (res) => {
+        this.creating.set(false);
+        const p = res.partner;
+        this.rows.set([{
+          name: p.name, code: p.code, shortCode: p.shortCode, sector: p.sector,
+          interfaces: p.interfaceCount, active: true, tenantId: p.id,
+        }, ...this.rows()]);
+        this.createdKey.set(res.apiKey);
+        this.createdPassword.set(res.tempPassword ?? '—');
+        this.audit.log('partner_create', 'partner', p.name, p.name, `Création du partenaire ${p.name}`).subscribe();
+      },
+      error: () => {
+        this.creating.set(false);
+        this.error.set("Échec de la création (droits insuffisants ou backend indisponible).");
+      },
     });
   }
 
@@ -196,11 +202,19 @@ export class PartnersComponent implements OnInit {
   }
 
   impersonate(p: PartnerRecord) {
-    this.tenant.setPartner({ name: p.name, code: p.code, shortCode: p.shortCode, sector: p.sector });
-    if (p.tenantId) this.tenant.setTenantId(p.tenantId);
-    this.tenant.setApiKey(apiKeyForPartner(p.name));
-    this.auth.impersonate(p.name);
-    this.audit.log('impersonate_start', 'partner', p.name, p.name, `Délégation banque → ${p.name}`).subscribe();
-    this.router.navigate(['/home']);
+    if (!p.tenantId) return;
+    this.partnerApi.impersonate(p.tenantId).subscribe({
+      next: (res) => {
+        this.tenant.setPartner({
+          name: res.partner, code: res.code, shortCode: res.shortCode, sector: res.sector,
+        });
+        this.tenant.setTenantId(res.tenantId);
+        this.tenant.setApiKey(null);
+        this.auth.impersonate(p.name, res.token);
+        this.audit.log('impersonate_start', 'partner', p.name, p.name, `Délégation banque → ${p.name}`).subscribe();
+        this.router.navigate(['/home']);
+      },
+      error: () => this.error.set(`Impossible d'ouvrir la session pour ${p.name}.`),
+    });
   }
 }

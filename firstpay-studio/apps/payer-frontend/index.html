@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Paiement sécurisé · FirstPay</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    :root { --fp:#E53935; --bg:#F6F7F9; --border:#E6E8EC; --border-strong:#D6D9DF;
+            --text:#15181E; --text-2:#5B6472; --text-3:#9AA2AF; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; background:var(--bg); color:var(--text);
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+    .wrap { min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:32px 16px; }
+    .card { width:100%; max-width:420px; background:#fff; border:1px solid var(--border);
+      border-radius:18px; overflow:hidden; box-shadow:0 18px 50px -24px rgba(15,23,42,.35); }
+    .brandbar { background:linear-gradient(135deg,var(--fp),#C62828); color:#fff; padding:20px 22px; display:flex; align-items:center; gap:13px; }
+    .blogo { width:40px; height:40px; border-radius:10px; background:rgba(255,255,255,.18);
+      display:grid; place-items:center; font-weight:800; font-size:14px; overflow:hidden; }
+    .blogo img { width:100%; height:100%; object-fit:cover; }
+    .bname { font-weight:700; font-size:15px; letter-spacing:.01em; }
+    .body { padding:22px; }
+    .iname { font-size:18px; font-weight:700; letter-spacing:-.01em; }
+    .idesc { font-size:13px; color:var(--text-2); margin-top:5px; line-height:1.5; }
+    .lbl { font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:.05em; font-weight:700; margin:18px 0 8px; }
+    .big { font-size:28px; font-weight:800; letter-spacing:-.02em; }
+    .big small { font-size:13px; color:var(--text-3); font-weight:600; }
+    input[type=text], input[type=tel], input[type=number], select {
+      width:100%; height:46px; border:1px solid var(--border-strong); border-radius:11px; padding:0 14px;
+      font-size:14px; font-family:inherit; color:var(--text); outline:none; background:#fff; }
+    input:focus, select:focus { border-color:var(--fp); box-shadow:0 0 0 3px rgba(229,57,53,.12); }
+    .field { margin-top:14px; }
+    .field > label { display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; }
+    .req { color:var(--fp); }
+    .presets { display:flex; flex-direction:column; gap:9px; }
+    .preset { display:flex; justify-content:space-between; align-items:center; padding:13px 14px;
+      border:1px solid var(--border-strong); border-radius:12px; font-size:14px; cursor:pointer; transition:.12s; }
+    .preset:hover { border-color:var(--fp); }
+    .preset.on { border-color:var(--fp); background:#FFF5F5; box-shadow:0 0 0 2px rgba(229,57,53,.12) inset; }
+    .preset b { font-weight:700; }
+    .methods { display:flex; flex-wrap:wrap; gap:8px; }
+    .m { padding:9px 13px; border-radius:10px; border:1px solid var(--border-strong); background:#fff;
+      font-size:13px; font-weight:600; cursor:pointer; transition:.12s; }
+    .m.on { border-color:var(--fp); background:#FFF5F5; color:#B71C1C; box-shadow:0 0 0 2px rgba(229,57,53,.12) inset; }
+    .m.orange.on { border-color:#FF7900; color:#B85600; background:#FFF4EA; box-shadow:0 0 0 2px rgba(255,121,0,.15) inset; }
+    .m.mtn.on { border-color:#FFCB05; color:#8A6D00; background:#FFFBE8; box-shadow:0 0 0 2px rgba(255,203,5,.2) inset; }
+    .pay { width:100%; margin-top:20px; height:50px; border:none; border-radius:13px; background:var(--fp);
+      color:#fff; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 8px 18px -6px rgba(229,57,53,.55); transition:.12s; }
+    .pay:hover { filter:brightness(1.04); }
+    .pay:disabled { opacity:.55; cursor:not-allowed; box-shadow:none; }
+    .secured { text-align:center; font-size:11.5px; color:var(--text-3); margin-top:14px; }
+    .err { color:#B71C1C; font-size:13px; margin-top:12px; background:#FFF5F5; border:1px solid #F3C2C2;
+      border-radius:10px; padding:10px 12px; display:none; }
+    .center { text-align:center; padding:48px 24px; }
+    .spin { width:34px; height:34px; border-radius:50%; border:3px solid var(--border); border-top-color:var(--fp);
+      margin:0 auto 16px; animation:r .8s linear infinite; }
+    @keyframes r { to { transform:rotate(360deg); } }
+    .ico { width:64px; height:64px; border-radius:50%; display:grid; place-items:center; margin:0 auto 16px; font-size:32px; }
+    .ico.ok { background:#E8F8EF; color:#1E9E54; }
+    .ico.ko { background:#FFF0F0; color:#D32F2F; }
+    .rtitle { font-size:19px; font-weight:800; }
+    .rsub { color:var(--text-2); font-size:13.5px; margin-top:6px; line-height:1.5; }
+    .ref { display:inline-block; margin-top:14px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+      font-size:13px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:6px 12px; }
+    .ghost { margin-top:18px; height:44px; padding:0 18px; border:1px solid var(--border-strong); background:#fff;
+      border-radius:11px; font-weight:600; font-size:13.5px; cursor:pointer; }
+    .hide { display:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="brandbar">
+        <div class="blogo" id="logo">FP</div>
+        <div class="bname" id="merchant">FirstPay</div>
+      </div>
+      <div class="body" id="body">
+        <div class="center"><div class="spin"></div><div class="rsub">Chargement de la page de paiement…</div></div>
+      </div>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

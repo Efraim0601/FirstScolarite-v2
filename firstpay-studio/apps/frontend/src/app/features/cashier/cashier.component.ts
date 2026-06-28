@@ -1,12 +1,12 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/auth/auth.service';
-import { PARTNERS_DB, PartnerRecord } from '../../core/models/partner.model';
-import { PaymentInterface, SEED_INTERFACES, Method, METHOD_LABELS } from '../../core/models/interface.model';
+import { PartnerRecord } from '../../core/models/partner.model';
+import { PaymentInterface, Method, METHOD_LABELS } from '../../core/models/interface.model';
 import { PartnerApiService } from '../../core/api/partner-api.service';
 import { TransactionApiService } from '../../core/api/transaction-api.service';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
-import { apiKeyForPartner } from '../../core/auth/api-keys';
+import { Transaction } from '../../core/models/transaction.model';
 
 interface Receipt {
   ref: string; payer: string; phone: string; amount: number; method: Method;
@@ -14,17 +14,6 @@ interface Receipt {
 }
 
 const STEP_LABELS = ['Identification', 'Montant', 'Mode', 'Validation'];
-
-/* Génère un catalogue plausible pour les partenaires hors SOFT (démo). */
-function partnerInterfaces(p: PartnerRecord): PaymentInterface[] {
-  if (p.shortCode === 'SOFT') return SEED_INTERFACES.filter((i) => i.status === 'actif');
-  return Array.from({ length: Math.min(p.interfaces, 3) }, (_, i) => ({
-    ...SEED_INTERFACES[i % SEED_INTERFACES.length],
-    id: `${p.shortCode}-if-${i + 1}`,
-    name: `${p.sector === 'Éducation' ? 'Frais' : 'Collecte'} ${p.shortCode} #${i + 1}`,
-    status: 'actif' as const,
-  }));
-}
 
 @Component({
   selector: 'fp-cashier',
@@ -46,9 +35,11 @@ function partnerInterfaces(p: PartnerRecord): PaymentInterface[] {
 
           <div class="stats">
             <div class="cstat" style="border-top-color:#7C3AED"><div class="cs-lbl">Encaissé aujourd'hui</div><div class="cs-val">{{ fr(collected()) }} XAF</div><div class="cs-sub">{{ count() }} transaction(s)</div></div>
-            <div class="cstat" style="border-top-color:#1F8A5B"><div class="cs-lbl">Solde caisse</div><div class="cs-val">280 500 XAF</div><div class="cs-sub">à reverser ce soir</div></div>
-            <div class="cstat" style="border-top-color:#B7791F"><div class="cs-lbl">En attente</div><div class="cs-val">0</div><div class="cs-sub">aucune réconciliation</div></div>
+            <div class="cstat" style="border-top-color:#1F8A5B"><div class="cs-lbl">Succès du jour</div><div class="cs-val">{{ fr(successRate()) }} %</div><div class="cs-sub">sur vos encaissements</div></div>
+            <div class="cstat" style="border-top-color:#B7791F"><div class="cs-lbl">En attente</div><div class="cs-val">{{ pendingCount() }}</div><div class="cs-sub">réconciliation</div></div>
           </div>
+
+          @if (loadError()) { <div class="load-err">{{ loadError() }}</div> }
 
           @if (!partner()) {
             <!-- Step 1: partner -->
@@ -61,6 +52,8 @@ function partnerInterfaces(p: PartnerRecord): PaymentInterface[] {
                   <div class="pick-logo">{{ p.shortCode }}</div>
                   <div><div class="pick-name">{{ p.name }}</div><div class="pick-sub">{{ p.sector }} · {{ p.interfaces }} interface(s)</div></div>
                 </div>
+              } @empty {
+                <div class="empty">Aucun partenaire actif disponible.</div>
               }
             </div>
           } @else {
@@ -75,6 +68,8 @@ function partnerInterfaces(p: PartnerRecord): PaymentInterface[] {
                   <div><div class="pick-name">{{ it.name }}</div><div class="pick-sub mono">/{{ it.slug }}</div></div>
                   <span class="go">Encaisser ›</span>
                 </div>
+              } @empty {
+                <div class="empty">Aucune interface active pour ce partenaire.</div>
               }
             </div>
           }
@@ -95,6 +90,7 @@ function partnerInterfaces(p: PartnerRecord): PaymentInterface[] {
             </div>
 
             <div class="proc-body">
+              @if (payError()) { <div class="pay-err">{{ payError() }}</div> }
               @switch (step()) {
                 @case (0) {
                   <label class="fld"><span>Nom du payeur <i>*</i></span><input [ngModel]="payer()" (ngModelChange)="payer.set($event)" placeholder="Nom et prénom"></label>
@@ -157,7 +153,7 @@ function partnerInterfaces(p: PartnerRecord): PaymentInterface[] {
               @if (step() < 3) {
                 <button class="primary" [disabled]="!canNext()" (click)="step.set(step() + 1)">Suivant ›</button>
               } @else {
-                <button class="primary" (click)="complete()">✓ Valider l'encaissement</button>
+                <button class="primary" [disabled]="submitting()" (click)="complete()">{{ submitting() ? 'Traitement…' : '✓ Valider l\'encaissement' }}</button>
               }
             </div>
           </div>
@@ -201,17 +197,20 @@ export class CashierComponent implements OnInit {
   readonly processing = signal<PaymentInterface | null>(null);
   readonly step = signal(0);
   readonly stepLabels = STEP_LABELS;
-  private readonly partnerRows = signal<PartnerRecord[]>(PARTNERS_DB);
-  private readonly apiIfaces = signal<PaymentInterface[] | null>(null);
+  private readonly partnerRows = signal<PartnerRecord[]>([]);
+  private readonly apiIfaces = signal<PaymentInterface[]>([]);
+  private readonly todayTxs = signal<Transaction[]>([]);
 
-  // process state
   readonly payer = signal('');
   readonly phone = signal('');
   readonly amount = signal(0);
   readonly method = signal<Method | null>(null);
   readonly fields = signal<Record<string, string>>({});
   readonly receipt = signal<Receipt | null>(null);
-  private dayCount = signal(0);
+  readonly loadError = signal('');
+  readonly payError = signal('');
+  readonly submitting = signal(false);
+  readonly collected = signal(0);
 
   readonly today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -219,14 +218,20 @@ export class CashierComponent implements OnInit {
     const q = this.pSearch().toLowerCase();
     return this.partnerRows().filter((p) => p.active).filter((p) => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.sector.toLowerCase().includes(q));
   });
-  readonly ifaces = computed(() => {
-    const api = this.apiIfaces();
-    if (api?.length) return api;
-    return this.partner() ? partnerInterfaces(this.partner()!) : [];
-  });
+  readonly ifaces = computed(() => this.apiIfaces().filter((i) => i.status === 'actif'));
   readonly validPresets = computed(() => this.processing()?.presets.filter((p) => p.amount) ?? []);
-  readonly count = computed(() => this.dayCount());
-  readonly collected = signal(0);
+  readonly count = computed(() => this.todaySuccess().length);
+  readonly pendingCount = computed(() => this.todayTxs().filter((t) => t.status === 'pending').length);
+  readonly successRate = computed(() => {
+    const txs = this.todayTxs();
+    if (!txs.length) return 0;
+    return Math.round((this.todaySuccess().length / txs.length) * 100);
+  });
+
+  private todaySuccess() {
+    const todayStr = new Date().toDateString();
+    return this.todayTxs().filter((t) => t.status === 'success' && new Date(t.date).toDateString() === todayStr);
+  }
 
   firstName() { return (this.auth.user()?.name ?? '').split(' ')[0]; }
   agency() { return this.auth.user()?.agency ?? 'Agence Bonanjo · Douala'; }
@@ -239,33 +244,59 @@ export class CashierComponent implements OnInit {
   setField(label: string, v: string) { this.fields.set({ ...this.fields(), [label]: v }); }
 
   ngOnInit() {
-    this.partnerApi.listPartners().subscribe((list) => {
-      if (list.length) {
+    this.partnerApi.listPartners().subscribe({
+      next: (list) => {
         this.partnerRows.set(list.map((d) => ({
           name: d.name, code: d.code, shortCode: d.shortCode, sector: d.sector,
           interfaces: d.interfaceCount, active: d.status === 'ACTIVE', tenantId: d.id,
         })));
-      }
+      },
+      error: () => this.loadError.set('Impossible de charger les partenaires.'),
+    });
+    this.loadTodayTxs();
+  }
+
+  private loadTodayTxs() {
+    this.txApi.getAll().subscribe({
+      next: (rows) => {
+        const uid = this.auth.user()?.id;
+        const mapped = this.mapApiRows(rows).filter((t) => t.fields?.['cashierId'] === uid || t.reference.startsWith('CASH-'));
+        this.todayTxs.set(mapped);
+        this.collected.set(this.todaySuccess().reduce((s, t) => s + t.amount, 0));
+      },
+      error: () => {},
     });
   }
 
   choosePartner(p: PartnerRecord) {
     this.partner.set(p);
-    this.apiIfaces.set(null);
-    if (p.tenantId) {
-      this.tenant.setTenantId(p.tenantId);
-      this.tenant.setApiKey(apiKeyForPartner(p.name));
-      this.partnerApi.fetchInterfaces().subscribe((rows) => {
-        this.apiIfaces.set(rows.filter((i) => i.status === 'actif'));
-      });
-    }
+    this.apiIfaces.set([]);
+    this.loadError.set('');
+    if (!p.tenantId) return;
+    this.partnerApi.impersonate(p.tenantId).subscribe({
+      next: (res) => {
+        this.tenant.setPartner({
+          name: res.partner, code: res.code, shortCode: res.shortCode, sector: res.sector,
+        });
+        this.tenant.setTenantId(res.tenantId);
+        this.tenant.setApiKey(null);
+        this.auth.setToken(res.token);
+        this.partnerApi.fetchInterfaces().subscribe({
+          next: (rows) => this.apiIfaces.set(rows),
+          error: () => this.loadError.set('Impossible de charger les interfaces du partenaire.'),
+        });
+      },
+      error: () => this.loadError.set('Impossible d\'accéder au partenaire sélectionné.'),
+    });
   }
+
   startProcess(it: PaymentInterface) {
     this.processing.set(it);
     this.step.set(0); this.payer.set(''); this.phone.set(''); this.fields.set({}); this.method.set(null);
+    this.payError.set('');
     this.amount.set(it.amountType === 'fixed' ? +it.fixedAmount : 0);
   }
-  cancel() { this.processing.set(null); }
+  cancel() { this.processing.set(null); this.payError.set(''); }
 
   canNext(): boolean {
     if (this.step() === 0) return this.payer().trim().length > 0 && this.phone().trim().length > 0;
@@ -287,10 +318,38 @@ export class CashierComponent implements OnInit {
         cashierId: this.auth.user()?.id, ...this.fields(),
       },
     };
-    const fallback = () => this.showReceipt(it, body.externalRef);
+    this.submitting.set(true);
+    this.payError.set('');
     this.txApi.create(body).subscribe({
-      next: (res) => this.showReceipt(it, res?.externalRef ?? body.externalRef),
-      error: () => fallback(),
+      next: (res) => {
+        this.submitting.set(false);
+        this.showReceipt(it, res?.externalRef ?? body.externalRef);
+        this.loadTodayTxs();
+      },
+      error: () => {
+        this.submitting.set(false);
+        this.payError.set('Échec de l\'encaissement. Vérifiez la connexion ou réessayez.');
+      },
+    });
+  }
+
+  private mapApiRows(rows: unknown[]): Transaction[] {
+    return rows.map((raw, i) => {
+      const r = raw as Record<string, unknown>;
+      const meta = (r['metadata'] ?? {}) as Record<string, string>;
+      return {
+        id: String(r['id'] ?? 'api-' + i),
+        reference: String(r['externalRef'] ?? r['reference'] ?? 'FP-' + i),
+        payer: meta['payer'] ?? '—',
+        phone: meta['phone'] ?? '',
+        interfaceId: meta['interfaceId'] ?? '',
+        interfaceName: meta['interfaceName'] ?? '—',
+        method: (meta['method'] ?? r['method'] ?? 'transfer') as Method,
+        status: String(r['status'] ?? 'success').toLowerCase() as Transaction['status'],
+        amount: +(r['amount'] ?? 0),
+        date: String(r['createdAt'] ?? new Date().toISOString()),
+        fields: meta,
+      };
     });
   }
 
@@ -302,8 +361,6 @@ export class CashierComponent implements OnInit {
       at: new Date().toLocaleString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     };
     this.receipt.set(r);
-    this.dayCount.set(this.dayCount() + 1);
-    this.collected.set(this.collected() + r.amount);
     this.processing.set(null);
   }
 

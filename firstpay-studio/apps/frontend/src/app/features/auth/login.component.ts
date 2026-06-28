@@ -5,7 +5,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { AuthApiService } from '../../core/auth/auth-api.service';
 import { DEMO_ACCOUNTS, ROLES_CATALOG, Account, RoleId } from '../../core/auth/roles';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
-import { apiKeyForPartner, tenantIdForPartner } from '../../core/auth/api-keys';
+import { demoApiKeyForPartner, demoTenantIdForPartner } from '../../core/auth/api-keys';
 
 @Component({
   selector: 'fp-login',
@@ -107,8 +107,8 @@ export class LoginComponent {
         shortCode: acc.partnerName === 'SOFT TECHNOLOGIES' ? 'SOFT' : 'EPAL',
         sector: acc.partnerName === 'SOFT TECHNOLOGIES' ? 'Fintech' : 'Éducation',
       });
-      this.tenant.setTenantId(tenantIdForPartner(acc.partnerName));
-      this.tenant.setApiKey(apiKeyForPartner(acc.partnerName));
+      this.tenant.setTenantId(demoTenantIdForPartner(acc.partnerName) ?? '');
+      this.tenant.setApiKey(demoApiKeyForPartner(acc.partnerName));
     }
     this.authApi.login(acc.email, 'demo').subscribe((res) => {
       if (res?.token) {

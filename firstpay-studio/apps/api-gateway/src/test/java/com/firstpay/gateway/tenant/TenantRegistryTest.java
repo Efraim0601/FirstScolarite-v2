@@ -8,10 +8,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TenantRegistryTest {
 
-    private final TenantRegistry registry = new TenantRegistry();
+    private final TenantRegistry registry = new TenantRegistry(true);
 
     @Test
-    void knownApiKey_resolvesTenant() {
+    void knownApiKey_resolvesTenant_whenFallbackEnabled() {
         Optional<TenantInfo> t = registry.findByApiKey("demo-soft-key");
         assertTrue(t.isPresent());
         assertEquals("SOFT TECHNOLOGIES", t.get().name());
@@ -21,6 +21,12 @@ class TenantRegistryTest {
     @Test
     void unknownApiKey_isEmpty() {
         assertTrue(registry.findByApiKey("nope").isEmpty());
+    }
+
+    @Test
+    void fallbackDisabled_hasNoEntries() {
+        TenantRegistry empty = new TenantRegistry(false);
+        assertTrue(empty.findByApiKey("demo-soft-key").isEmpty());
     }
 
     @Test

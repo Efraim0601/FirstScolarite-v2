@@ -25,6 +25,9 @@ firstpay:
   jwt:
     secret: ${JWT_SECRET:firstpay-dev-secret-change-me-please-32b}
     ttl-seconds: ${JWT_TTL_SECONDS:28800}
+  internal-token: ${INTERNAL_TOKEN:}
+  # Appel server-to-server pour l'initiation de paiement depuis la page payeur publique.
+  transaction-service-uri: ${TRANSACTION_SVC_URI:http://localhost:8080}
 management:
   endpoints:
     web:

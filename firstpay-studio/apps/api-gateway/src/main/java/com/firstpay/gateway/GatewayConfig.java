@@ -24,6 +24,10 @@ public class GatewayConfig {
                 .uri("lb://partner-service"))
             .route("payment-webhooks", r -> r.path("/webhooks/**")
                 .uri("lb://payment-service"))
+            // Route publique : page payeur (lien/QR partagé) — résolution shortCode/slug,
+            // sans filtre tenant/API-key (le client final n'est pas authentifié).
+            .route("public-checkout", r -> r.path("/public/**")
+                .uri("lb://partner-service"))
             .route("transaction-service", r -> r.path("/api/v1/transactions/**")
                 .filters(f -> f
                     .filter(tenantFilter)

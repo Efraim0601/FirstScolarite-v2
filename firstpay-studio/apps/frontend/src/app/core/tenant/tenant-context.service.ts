@@ -7,14 +7,9 @@ export interface Partner {
 /** Contexte tenant courant (partenaire actif). Source du header X-Tenant-Id. */
 @Injectable({ providedIn: 'root' })
 export class TenantContextService {
-  private readonly _partner = signal<Partner | null>({
-    name: 'SOFT TECHNOLOGIES',
-    code: 'FSPAY_202605211633050082',
-    shortCode: 'SOFT',
-    sector: 'Fintech',
-  });
-  private readonly _tenantId = signal<string | null>('11111111-1111-1111-1111-111111111111');
-  private readonly _apiKey = signal<string | null>('demo-soft-key');
+  private readonly _partner = signal<Partner | null>(null);
+  private readonly _tenantId = signal<string | null>(null);
+  private readonly _apiKey = signal<string | null>(null);
 
   readonly partner = this._partner.asReadonly();
   readonly tenantId = this._tenantId.asReadonly();

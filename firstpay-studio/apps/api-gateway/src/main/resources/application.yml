@@ -52,9 +52,12 @@ firstpay:
     ttl-seconds: ${JWT_TTL_SECONDS:28800}
   portal:
     rate-limit-tpm: ${PORTAL_RATE_LIMIT_TPM:6000}
-  # Source de vérité des tenants (résolution API-key → tenant), avec repli in-memory.
+  # Source de vérité des tenants (résolution API-key → tenant).
   partner-service:
     url: ${PARTNER_SVC_URI:http://partner-service:8080}
+  internal-token: ${INTERNAL_TOKEN:}
+  tenant:
+    fallback-enabled: ${TENANT_FALLBACK_ENABLED:false}
 
 # Circuit breaker partagé (route transaction-cb)
 resilience4j:

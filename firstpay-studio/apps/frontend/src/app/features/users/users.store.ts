@@ -4,7 +4,6 @@ import { PartnerApiService, ApiUserDto } from '../../core/api/partner-api.servic
 
 export type PartnerRole = 'admin' | 'manager' | 'accountant' | 'viewer';
 
-/** Mappe le rôle plateforme (partner_admin…) vers le rôle court de l'UI. */
 const API_TO_UI_ROLE: Record<string, PartnerRole> = {
   partner_admin: 'admin', partner_manager: 'manager',
   partner_accountant: 'accountant', partner_viewer: 'viewer',
@@ -27,49 +26,36 @@ export const PARTNER_ROLES: Record<PartnerRole, { label: string; color: string; 
   viewer:     { label: 'Lecture seule', color: '#7C8493', bg: '#F2F4F7', border: 'var(--border-strong)', desc: 'Consulte les interfaces et transactions sans pouvoir modifier.' },
 };
 
-const SEED: PartnerUser[] = [
-  { id: 'u-1', name: 'Jospin Leunou', email: 'jospinleunou@softtech.cm', role: 'admin', status: 'active', lastSeen: 'Il y a 2 heures' },
-  { id: 'u-2', name: 'Marie Ngono', email: 'marie.ngono@softtech.cm', role: 'manager', status: 'active', lastSeen: 'Hier · 16:42' },
-  { id: 'u-3', name: 'Daniel Essomba', email: 'd.essomba@softtech.cm', role: 'accountant', status: 'active', lastSeen: 'Il y a 3 jours' },
-  { id: 'u-4', name: 'Sophie Mbarga', email: 's.mbarga@softtech.cm', role: 'viewer', status: 'active', lastSeen: 'Il y a 1 semaine' },
-  { id: 'u-5', name: 'Ahmed Talla', email: 'a.talla@softtech.cm', role: 'manager', status: 'pending', lastSeen: '—' },
-];
-
 export const UsersStore = signalStore(
   { providedIn: 'root' },
-  withState<{ users: PartnerUser[]; useApi: boolean }>({ users: SEED, useApi: false }),
+  withState<{ users: PartnerUser[]; loading: boolean; error: string | null }>({
+    users: [], loading: false, error: null,
+  }),
   withMethods((store, api = inject(PartnerApiService)) => ({
     loadFromApi() {
-      api.fetchUsers().subscribe((rows) => {
-        if (rows && rows.length > 0) {
-          patchState(store, { users: rows.map(fromApi), useApi: true });
-        } else {
-          patchState(store, { useApi: false });
-        }
+      patchState(store, { loading: true, error: null });
+      api.fetchUsers().subscribe({
+        next: (rows) => patchState(store, { users: rows.map(fromApi), loading: false, error: null }),
+        error: () => patchState(store, { loading: false, error: 'Impossible de charger les utilisateurs.' }),
       });
     },
     upsert(u: PartnerUser) {
-      const persist = () => {
-        const arr = store.users();
-        const idx = arr.findIndex((x) => x.id === u.id);
-        if (idx >= 0) { const copy = [...arr]; copy[idx] = u; patchState(store, { users: copy }); }
-        else patchState(store, { users: [{ ...u, id: 'u-' + Date.now(), lastSeen: '—' }, ...arr] });
-      };
-      if (store.useApi()) {
-        api.saveUser(toApi(u)).subscribe((saved) => {
-          if (saved) {
-            const mapped = fromApi(saved);
-            const arr = store.users();
-            const idx = arr.findIndex((x) => x.email === mapped.email);
-            if (idx >= 0) { const copy = [...arr]; copy[idx] = mapped; patchState(store, { users: copy }); }
-            else patchState(store, { users: [mapped, ...arr] });
-          } else { persist(); }
-        });
-      } else { persist(); }
+      api.saveUser(toApi(u)).subscribe({
+        next: (saved) => {
+          const mapped = fromApi(saved);
+          const arr = store.users();
+          const idx = arr.findIndex((x) => x.id === mapped.id || x.email === mapped.email);
+          if (idx >= 0) { const copy = [...arr]; copy[idx] = mapped; patchState(store, { users: copy, error: null }); }
+          else patchState(store, { users: [mapped, ...arr], error: null });
+        },
+        error: () => patchState(store, { error: 'Échec de l\'enregistrement.' }),
+      });
     },
     remove(id: string) {
-      const doRemove = () => patchState(store, { users: store.users().filter((u) => u.id !== id) });
-      if (store.useApi()) { api.deleteUser(id).subscribe(() => doRemove()); } else { doRemove(); }
+      api.deleteUser(id).subscribe({
+        next: () => patchState(store, { users: store.users().filter((u) => u.id !== id), error: null }),
+        error: () => patchState(store, { error: 'Suppression impossible.' }),
+      });
     },
   })),
 );

@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, catchError, map, of } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { PaymentInterface } from '../models/interface.model';
 import { Transaction } from '../models/transaction.model';
@@ -75,37 +75,34 @@ export interface CreatePartnerResponse {
   tempPassword?: string;
 }
 
+export interface ImpersonateResponse {
+  token: string;
+  tenantId: string;
+  partner: string;
+  code: string;
+  shortCode: string;
+  sector: string;
+  tokenType: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PartnerApiService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  getInterfaces(): Observable<PaymentInterface[]> {
-    return this.http.get<ApiInterfaceDto[]>(`${this.base}/api/v1/interfaces`).pipe(
-      catchError(() => of([])),
-      // map in pipe via switchMap alternative - use map operator
-    ) as unknown as Observable<PaymentInterface[]>;
-  }
-
   fetchInterfaces(): Observable<PaymentInterface[]> {
-    return new Observable((observer) => {
-      this.http.get<ApiInterfaceDto[]>(`${this.base}/api/v1/interfaces`).subscribe({
-        next: (rows) => { observer.next(rows.map(mapInterface)); observer.complete(); },
-        error: () => { observer.next([]); observer.complete(); },
-      });
-    });
+    return this.http.get<ApiInterfaceDto[]>(`${this.base}/api/v1/interfaces`).pipe(
+      map((rows) => rows.map(mapInterface)),
+    );
   }
 
   fetchTransactions(): Observable<Transaction[]> {
-    return new Observable((observer) => {
-      this.http.get<ApiTransactionDto[]>(`${this.base}/api/v1/transactions?limit=200`).subscribe({
-        next: (rows) => { observer.next(rows.map(mapTransaction)); observer.complete(); },
-        error: () => { observer.next([]); observer.complete(); },
-      });
-    });
+    return this.http.get<ApiTransactionDto[]>(`${this.base}/api/v1/transactions?limit=200`).pipe(
+      map((rows) => rows.map(mapTransaction)),
+    );
   }
 
-  saveInterface(payload: Partial<PaymentInterface>): Observable<PaymentInterface | null> {
+  saveInterface(payload: Partial<PaymentInterface>): Observable<PaymentInterface> {
     const body = toSavePayload(payload);
     const isNew = !payload.id || payload.id.startsWith('new-');
     const url = isNew
@@ -114,65 +111,44 @@ export class PartnerApiService {
     const req = isNew
       ? this.http.post<ApiInterfaceDto>(url, body)
       : this.http.put<ApiInterfaceDto>(url, body);
-    return new Observable((observer) => {
-      req.subscribe({
-        next: (row) => { observer.next(mapInterface(row)); observer.complete(); },
-        error: () => { observer.next(null); observer.complete(); },
-      });
-    });
+    return req.pipe(map(mapInterface));
   }
 
-  deleteInterface(id: string): Observable<boolean> {
-    return new Observable((observer) => {
-      this.http.delete(`${this.base}/api/v1/interfaces/${id}`).subscribe({
-        next: () => { observer.next(true); observer.complete(); },
-        error: () => { observer.next(false); observer.complete(); },
-      });
-    });
+  deleteInterface(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api/v1/interfaces/${id}`);
   }
 
   listPartners(): Observable<PartnerListDto[]> {
-    return this.http.get<PartnerListDto[]>(`${this.base}/api/v1/partners`).pipe(
-      catchError(() => of([])),
-    );
+    return this.http.get<PartnerListDto[]>(`${this.base}/api/v1/partners`);
   }
 
-  /** Création d'un partenaire (admin banque). Renvoie le partenaire + l'API-key (une fois). */
-  createPartner(req: CreatePartnerRequest): Observable<CreatePartnerResponse | null> {
-    return this.http.post<CreatePartnerResponse>(`${this.base}/api/v1/partners`, req).pipe(
-      catchError(() => of(null)),
-    );
+  createPartner(req: CreatePartnerRequest): Observable<CreatePartnerResponse> {
+    return this.http.post<CreatePartnerResponse>(`${this.base}/api/v1/partners`, req);
   }
 
-  fetchUsers(): Observable<ApiUserDto[] | null> {
-    return this.http.get<ApiUserDto[]>(`${this.base}/api/v1/users`).pipe(
-      catchError(() => of(null)),
-    );
+  /** JWT de délégation banque → partenaire (role partner_admin, tenant cible). */
+  impersonate(tenantId: string): Observable<ImpersonateResponse> {
+    return this.http.post<ImpersonateResponse>(`${this.base}/api/v1/partners/${tenantId}/impersonate`, {});
   }
 
-  saveUser(user: ApiUserDto): Observable<ApiUserDto | null> {
-    return this.http.post<ApiUserDto>(`${this.base}/api/v1/users`, user).pipe(
-      catchError(() => of(null)),
-    );
+  fetchUsers(): Observable<ApiUserDto[]> {
+    return this.http.get<ApiUserDto[]>(`${this.base}/api/v1/users`);
   }
 
-  deleteUser(id: string): Observable<boolean> {
-    return this.http.delete(`${this.base}/api/v1/users/${id}`).pipe(
-      map(() => true),
-      catchError(() => of(false)),
-    );
+  saveUser(user: ApiUserDto): Observable<ApiUserDto> {
+    return this.http.post<ApiUserDto>(`${this.base}/api/v1/users`, user);
   }
 
-  fetchSettings(): Observable<ApiSettingsDto | null> {
-    return this.http.get<ApiSettingsDto>(`${this.base}/api/v1/settings`).pipe(
-      catchError(() => of(null)),
-    );
+  deleteUser(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api/v1/users/${id}`);
   }
 
-  saveSettings(settings: ApiSettingsDto): Observable<ApiSettingsDto | null> {
-    return this.http.put<ApiSettingsDto>(`${this.base}/api/v1/settings`, settings).pipe(
-      catchError(() => of(null)),
-    );
+  fetchSettings(): Observable<ApiSettingsDto> {
+    return this.http.get<ApiSettingsDto>(`${this.base}/api/v1/settings`);
+  }
+
+  saveSettings(settings: ApiSettingsDto): Observable<ApiSettingsDto> {
+    return this.http.put<ApiSettingsDto>(`${this.base}/api/v1/settings`, settings);
   }
 }
 

@@ -10,6 +10,7 @@ export class AuthService {
   private readonly _user = signal<Account | null>(null);
   private readonly _impersonatedPartner = signal<string | null>(null);
   private readonly _token = signal<string | null>(null);
+  private readonly _bankToken = signal<string | null>(null);
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => this._user() !== null);
@@ -42,10 +43,23 @@ export class AuthService {
     this._user.set(null);
     this._impersonatedPartner.set(null);
     this._token.set(null);
+    this._bankToken.set(null);
   }
 
-  impersonate(partnerName: string) { this._impersonatedPartner.set(partnerName); }
-  exitImpersonate() { this._impersonatedPartner.set(null); }
+  impersonate(partnerName: string, delegatedToken?: string) {
+    if (!this._impersonatedPartner()) {
+      this._bankToken.set(this._token());
+    }
+    if (delegatedToken) this._token.set(delegatedToken);
+    this._impersonatedPartner.set(partnerName);
+  }
+
+  exitImpersonate() {
+    const bank = this._bankToken();
+    if (bank) this._token.set(bank);
+    this._bankToken.set(null);
+    this._impersonatedPartner.set(null);
+  }
 
   hasPerm(perm: string): boolean {
     const perms = this.roleDef()?.perms ?? [];

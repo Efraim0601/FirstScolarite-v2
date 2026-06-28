@@ -14,10 +14,7 @@ const KINDS: Record<string, { label: string; color: string; glyph: string }> = {
   login_fail: { label: 'Tentative échouée', color: '#E53935', glyph: '⛨' },
 };
 
-const FALLBACK: AuditEventDto[] = [
-  { id: 'ev-1', kind: 'publish', actor: 'Jospin Leunou', target: 'Frais de scolarité 2025-2026', partner: 'SOFT TECHNOLOGIES', ts: "À l'instant", level: 'info' },
-  { id: 'ev-5', kind: 'impersonate', actor: 'Cécile Mvondo', target: '→ ÉCOLE LES PALMIERS', partner: 'ÉCOLE LES PALMIERS', ts: 'Il y a 2 h', level: 'danger' },
-];
+const FALLBACK: AuditEventDto[] = [];
 
 @Component({
   selector: 'fp-audit',
@@ -68,8 +65,9 @@ export class AuditComponent implements OnInit {
   ngOnInit() { this.load(); }
 
   load() {
-    this.auditApi.list(this.filter()).subscribe((rows) => {
-      if (rows.length > 0) this.events.set(rows);
+    this.auditApi.list(this.filter()).subscribe({
+      next: (rows) => this.events.set(rows),
+      error: () => this.events.set([]),
     });
   }
 
