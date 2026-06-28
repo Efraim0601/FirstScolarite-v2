@@ -12,10 +12,6 @@ services:
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     restart: unless-stopped
 
-  postgres-replica:
-    profiles: ["read-replica"]
-    restart: unless-stopped
-
   pgbouncer:
     ports: []
     environment:

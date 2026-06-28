@@ -49,9 +49,9 @@ services:
       timeout: 5s
       retries: 10
 
-  # Réplica en lecture (streaming replication réelle). Bootstrap via pg_basebackup au
-  # premier démarrage, puis démarre en hot standby. reporting-service lit ici (READ_DB_URL).
+  # Réplica en lecture (optionnel — profil read-replica). En prod VPS, reporting lit le primaire.
   postgres-replica:
+    profiles: ["read-replica"]
     image: postgres:16-alpine
     user: postgres
     environment:
@@ -207,8 +207,6 @@ services:
         condition: service_started
       transaction-service:
         condition: service_healthy
-      postgres-replica:
-        condition: service_started
 
   frontend:
     build: { context: ., dockerfile: apps/frontend/Dockerfile }
