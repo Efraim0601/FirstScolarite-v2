@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.local
+*.env
+!.env.production.example
+
+# Java / Maven
+**/target/
+*.class
+
+# Node / Angular
+**/node_modules/
+**/dist/
+**/.angular/
+out-tsc/
+
+# IDE / OS
+.vscode/
+*.iml
+.DS_Store
+
+# Cursor / outils locaux (non versionnés)
+.github/modernize/
