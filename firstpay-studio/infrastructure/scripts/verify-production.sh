@@ -33,7 +33,7 @@ else
 fi
 
 echo "==> Conteneurs actifs"
-docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null \
-  || docker compose ps
+  ${COMPOSE} ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null \
+  || docker compose -p firstpay-studio -f docker-compose.yml -f docker-compose.prod.yml ps
 
 echo "==> Smoke test production terminé"

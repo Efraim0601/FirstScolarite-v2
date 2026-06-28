@@ -24,7 +24,8 @@ DEPLOY_DIR="${DEPLOY_DIR:-/opt/firstpay-studio}"
 DOMAIN="${DOMAIN:-firstsign.afbdei.com}"
 SSL_EMAIL="${SSL_EMAIL:-admin@afbdei.com}"
 
-COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
+COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yml -f docker-compose.prod.yml"
 
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] ERREUR: $*" >&2; exit 1; }
@@ -105,6 +106,21 @@ render_caddyfile() {
     > infrastructure/caddy/Caddyfile
 }
 
+ensure_reverse_proxy_ports() {
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/lib/ensure-ports.sh"
+  ensure_reverse_proxy_ports
+}
+
+stop_conflicting_stacks() {
+  if [[ "${STOP_DEMO_STACK:-1}" == "1" ]]; then
+    if docker compose -p firstpay-demo ps -q 2>/dev/null | grep -q .; then
+      log "Arrêt de la stack recette firstpay-demo (ports 14200/18080)…"
+      docker compose -p firstpay-demo -f docker-compose.yml -f docker-compose.demo.yml down 2>/dev/null || true
+    fi
+  fi
+}
+
 check_dns() {
   log "Vérification DNS pour ${DOMAIN}…"
   if command -v dig >/dev/null 2>&1; then
@@ -139,7 +155,9 @@ build_and_start() {
     attempt=$((attempt + 1))
   done
 
-  log "Démarrage de la stack (sans réplica Postgres — VPS mono-nœud)…"
+  log "Démarrage de la stack production (projet ${COMPOSE_PROJECT_NAME})…"
+  stop_conflicting_stacks
+  ensure_reverse_proxy_ports
   ${COMPOSE} up -d
 
   log "Attente du service transaction-service (max 3 min)…"
@@ -172,7 +190,8 @@ post_deploy_info() {
 ║    ./infrastructure/scripts/update-production.sh
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Admin banque : Paramètres plateforme → config SMTP + TrustPayWay
-║  Comptes démo : voir docs/DEPLOIEMENT.md § 3.3 (recette)
+║  Recette (seed démo, sans SSL) :
+║    sudo ./infrastructure/scripts/deploy-demo.sh
 ╚══════════════════════════════════════════════════════════════════╝
 
 EOF

@@ -1,0 +1,60 @@
+# Overlay RECETTE / DÉMO — sans Caddy, ports dédiés (pas de conflit 80/443).
+#
+#   docker compose -p firstpay-demo -f docker-compose.yml -f docker-compose.demo.yml up -d --build
+#   ou : sudo ./infrastructure/scripts/deploy-demo.sh
+#
+# Frontend : http://<serveur>:14200
+# API      : http://<serveur>:18080
+# Payeur   : http://<serveur>:14300
+
+services:
+  api-gateway:
+    ports: ["18080:8080"]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      FRONTEND_ORIGIN: ${DEMO_FRONTEND_ORIGIN:-http://localhost:14200}
+      JWT_SECRET: ${JWT_SECRET:-firstpay-dev-secret-change-me-please-32b}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-firstpay-dev-internal}
+      TENANT_FALLBACK_ENABLED: "true"
+
+  transaction-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_PASS: ${DB_PASS:-dev_password}
+
+  partner-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_PASS: ${DB_PASS:-dev_password}
+      JWT_SECRET: ${JWT_SECRET:-firstpay-dev-secret-change-me-please-32b}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-firstpay-dev-internal}
+
+  payment-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      PAYMENT_SIMULATION_ENABLED: "true"
+      PAYMENT_WEBHOOK_BASE: ${DEMO_WEBHOOK_BASE:-http://localhost:18080/webhooks/trustpayway}
+
+  reporting-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_PASS: ${DB_PASS:-dev_password}
+      READ_DB_URL: r2dbc:postgresql://postgres:5432/firstpay
+
+  frontend:
+    ports: ["14200:80"]
+
+  payer-frontend:
+    ports: ["14300:80"]
+
+  # Observabilité optionnelle (économise RAM sur VPS)
+  jaeger:
+    profiles: ["observability"]
+  prometheus:
+    profiles: ["observability"]
+  grafana:
+    profiles: ["observability"]
+  otel-collector:
+    profiles: ["observability"]
+  alertmanager:
+    profiles: ["observability"]

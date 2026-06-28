@@ -15,7 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${PROJECT_ROOT}"
 
-COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
+COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} -f docker-compose.yml -f docker-compose.prod.yml"
 GIT_BRANCH="${GIT_BRANCH:-master}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/firstpay}"
 
@@ -32,6 +33,12 @@ render_caddyfile() {
   envsubst '${DOMAIN} ${SSL_EMAIL}' \
     < infrastructure/caddy/Caddyfile.template \
     > infrastructure/caddy/Caddyfile
+}
+
+ensure_reverse_proxy_ports() {
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/lib/ensure-ports.sh"
+  ensure_reverse_proxy_ports
 }
 
 backup_database() {
@@ -61,6 +68,9 @@ git_pull() {
 
 rebuild_stack() {
   render_caddyfile
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/lib/ensure-ports.sh"
+  ensure_reverse_proxy_ports
   log "Rebuild et redémarrage des conteneurs…"
   local attempt=1
   until ${COMPOSE} build --parallel; do
@@ -71,6 +81,7 @@ rebuild_stack() {
     sleep 15
     attempt=$((attempt + 1))
   done
+  ensure_reverse_proxy_ports
   ${COMPOSE} up -d --remove-orphans
   log "Nettoyage des images Docker inutilisées…"
   docker image prune -f >/dev/null 2>&1 || true
