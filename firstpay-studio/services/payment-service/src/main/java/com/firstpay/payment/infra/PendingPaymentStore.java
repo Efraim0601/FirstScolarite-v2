@@ -9,6 +9,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 /** File d'attente Redis des paiements agrégateur en cours de confirmation. */
 @Repository
