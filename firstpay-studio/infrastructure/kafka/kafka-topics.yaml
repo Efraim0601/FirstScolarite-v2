@@ -1,0 +1,26 @@
+# Topics Kafka — dimensionnés pour 1M tx/min (règle : 1 partition ≈ 100k msg/min)
+topics:
+  - name: transactions.created
+    partitions: 12
+    replication-factor: 3
+    config:
+      retention.ms: 604800000        # 7 jours
+      compression.type: lz4
+      min.insync.replicas: 2
+
+  - name: transactions.processed
+    partitions: 12
+    replication-factor: 3
+    config:
+      compression.type: lz4
+      min.insync.replicas: 2
+
+  - name: transactions.failed         # Dead Letter Queue
+    partitions: 6
+    replication-factor: 3
+
+  - name: payments.outbox
+    partitions: 12
+    replication-factor: 3
+    config:
+      cleanup.policy: compact         # Outbox pattern

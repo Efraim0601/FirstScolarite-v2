@@ -1,0 +1,18 @@
+{{- range $svc := .Values.services }}
+{{- $d := $.Values.defaults }}
+{{- $min := $svc.minReplicas | default $d.minReplicas }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    {{- include "firstpay.labels" (dict "ctx" $ "name" $svc.name) | nindent 4 }}
+spec:
+  # Garde au moins (minReplicas - 1) pods pendant un drain/upgrade ; jamais 0.
+  minAvailable: {{ max 1 (sub (int $min) 1) }}
+  selector:
+    matchLabels:
+      {{- include "firstpay.selectorLabels" (dict "name" $svc.name) | nindent 6 }}
+---
+{{- end }}

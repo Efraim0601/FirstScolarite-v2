@@ -1,0 +1,43 @@
+# Surcharge environnement STAGING : `helm upgrade firstpay ./firstpay -f values-staging.yaml`
+global:
+  environment: staging
+  imageTag: staging
+  imagePullPolicy: Always
+  domain: studio-staging.afrilandfirstbank.com
+
+common:
+  tracingSampleRate: "0.5"
+  config:
+    FRONTEND_ORIGIN: https://studio-staging.afrilandfirstbank.com
+
+defaults:
+  minReplicas: 2
+  maxReplicas: 15
+
+services:
+  - name: api-gateway
+    port: 8080
+    public: true
+    minReplicas: 2
+    maxReplicas: 8
+  - name: transaction-service
+    port: 8080
+    minReplicas: 3
+    maxReplicas: 20
+    tpsTarget: "1500"
+    resources:
+      requests: { cpu: "750m", memory: "1Gi" }
+      limits: { cpu: "2", memory: "2Gi" }
+  - name: payment-service
+    port: 8080
+    minReplicas: 2
+    maxReplicas: 12
+    tpsTarget: "1500"
+  - name: partner-service
+    port: 8080
+    minReplicas: 2
+    maxReplicas: 6
+  - name: reporting-service
+    port: 8080
+    minReplicas: 2
+    maxReplicas: 8

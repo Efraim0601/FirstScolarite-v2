@@ -1,0 +1,79 @@
+{{- range $svc := .Values.services }}
+{{- $d := $.Values.defaults }}
+{{- $port := $svc.port | default 8080 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    {{- include "firstpay.labels" (dict "ctx" $ "name" $svc.name) | nindent 4 }}
+spec:
+  replicas: {{ $svc.minReplicas | default $d.minReplicas }}
+  selector:
+    matchLabels:
+      {{- include "firstpay.selectorLabels" (dict "name" $svc.name) | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "firstpay.labels" (dict "ctx" $ "name" $svc.name) | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $port | quote }}
+        prometheus.io/path: /actuator/prometheus
+    spec:
+      terminationGracePeriodSeconds: 45
+      # Anti-affinite : eviter d'empiler les replicas sur le meme noeud
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "firstpay.selectorLabels" (dict "name" $svc.name) | nindent 20 }}
+      containers:
+        - name: {{ $svc.name }}
+          image: {{ include "firstpay.image" (dict "ctx" $ "name" $svc.name) | quote }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+          envFrom:
+            - configMapRef:
+                name: firstpay-config
+            - secretRef:
+                name: firstpay-secrets
+                optional: true
+          env:
+            - name: JAVA_OPTS
+              value: {{ ($svc.javaOpts | default $d.javaOpts) | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+          resources:
+            {{- toYaml ($svc.resources | default $d.resources) | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /actuator/health/readiness, port: {{ $port }} }
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: {{ $port }} }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: {{ $port }} }
+            periodSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # Laisse le temps a Istio/Service de retirer le pod des endpoints
+              exec: { command: ["sh", "-c", "sleep 8"] }
+---
+{{- end }}

@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: payment-service
+
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+      timeout: 1000ms
+
+  threads:
+    virtual:
+      enabled: true
+
+# Un circuit breaker par connecteur : isole la panne d'un moyen de paiement.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        sliding-window-size: 50
+        permitted-number-of-calls-in-half-open-state: 5
+    instances:
+      orange-connector: { base-config: default }
+      mtn-connector: { base-config: default }
+      card-connector: { base-config: default }
+      transfer-connector: { base-config: default }
+  # Durcissement (Phase 9) : un bulkhead par connecteur isole la saturation d'un PSP
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 100
+        max-wait-duration: 20ms
+    instances:
+      orange-connector: { base-config: default }
+      mtn-connector: { base-config: default }
+      card-connector: { base-config: default }
+      transfer-connector: { base-config: default }
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 5s
+        cancel-running-future: true
+    instances:
+      orange-connector: { base-config: default }
+      mtn-connector: { base-config: default }
+      card-connector: { base-config: default }
+      transfer-connector: { base-config: default }
+
+server:
+  port: 8080
+  shutdown: graceful
+
+firstpay:
+  partner-service-uri: ${PARTNER_SVC_URI:http://localhost:8080}
+  payment:
+    webhook-base: ${PAYMENT_WEBHOOK_BASE:http://localhost:18080/webhooks/trustpayway}
+    reconcile-interval-ms: ${PAYMENT_RECONCILE_MS:30000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 20ms,100ms,500ms
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:0.1}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

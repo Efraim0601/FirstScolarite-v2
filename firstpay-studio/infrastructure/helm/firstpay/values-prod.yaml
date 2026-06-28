@@ -1,0 +1,56 @@
+# Surcharge environnement PRODUCTION : cible >= 1M tx/min.
+# `helm upgrade firstpay ./firstpay -f values-prod.yaml`
+global:
+  environment: prod
+  imageRegistry: registry.afrilandfirstbank.com/firstpay
+  imageTag: "1.0.0"
+  imagePullPolicy: IfNotPresent
+  domain: studio.afrilandfirstbank.com
+
+common:
+  tracingSampleRate: "0.05"   # 5 % : volume eleve, on echantillonne agressivement
+  config:
+    FRONTEND_ORIGIN: https://studio.afrilandfirstbank.com
+
+# En prod les secrets viennent de Vault/SealedSecrets : ne pas creer depuis le chart.
+secrets:
+  create: false
+
+istio:
+  mtls: STRICT
+
+services:
+  - name: api-gateway
+    port: 8080
+    public: true
+    minReplicas: 6
+    maxReplicas: 60
+    resources:
+      requests: { cpu: "1", memory: "1Gi" }
+      limits: { cpu: "3", memory: "3Gi" }
+  - name: transaction-service
+    port: 8080
+    minReplicas: 10
+    maxReplicas: 80
+    cpuTarget: 60
+    tpsTarget: "2000"
+    javaOpts: "-XX:+UseZGC -XX:+ZGenerational -Xms2g -Xmx6g -XX:+ExitOnOutOfMemoryError"
+    resources:
+      requests: { cpu: "2", memory: "2Gi" }
+      limits: { cpu: "6", memory: "8Gi" }
+  - name: payment-service
+    port: 8080
+    minReplicas: 8
+    maxReplicas: 70
+    tpsTarget: "2000"
+    resources:
+      requests: { cpu: "1500m", memory: "1500Mi" }
+      limits: { cpu: "4", memory: "4Gi" }
+  - name: partner-service
+    port: 8080
+    minReplicas: 3
+    maxReplicas: 15
+  - name: reporting-service
+    port: 8080
+    minReplicas: 4
+    maxReplicas: 30

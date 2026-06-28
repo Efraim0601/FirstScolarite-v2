@@ -1,0 +1,23 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{- range $svc := .Values.services }}
+# ServiceMonitor (CRD prometheus-operator) : declare le scraping des metriques.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    {{- include "firstpay.labels" (dict "ctx" $ "name" $svc.name) | nindent 4 }}
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      {{- include "firstpay.selectorLabels" (dict "name" $svc.name) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: {{ $.Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ $.Values.serviceMonitor.scrapeTimeout }}
+---
+{{- end }}
+{{- end }}

@@ -1,0 +1,37 @@
+# Alertmanager — routage des alertes FirstPay (P99, erreurs 5xx, service down, lag Kafka…).
+# Les récepteurs ci-dessous sont des exemples : remplacer les webhooks/SMTP par les vrais
+# canaux (Slack/PagerDuty/email) via variables d'env / secrets en prod.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Les alertes critiques (paiement) partent immédiatement vers l'astreinte.
+    - matchers:
+        - severity = "critical"
+      receiver: oncall
+      group_wait: 10s
+      repeat_interval: 1h
+
+receivers:
+  - name: default
+    webhook_configs:
+      - url: ${ALERT_WEBHOOK_URL:-http://localhost:5001/alerts}
+        send_resolved: true
+
+  - name: oncall
+    webhook_configs:
+      - url: ${ONCALL_WEBHOOK_URL:-http://localhost:5001/oncall}
+        send_resolved: true
+
+inhibit_rules:
+  # Une alerte "service down" masque les alertes de latence/erreur du même service.
+  - source_matchers: [ alertname = "ServiceDown" ]
+    target_matchers: [ severity =~ "warning|critical" ]
+    equal: ['service']

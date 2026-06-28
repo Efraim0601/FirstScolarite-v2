@@ -1,0 +1,16 @@
+apiVersion: v2
+name: firstpay-studio
+description: >-
+  Chart Helm parametre pour la plateforme FirstPay Studio (Afriland First Bank).
+  Rend, pour chaque microservice, un Deployment + Service + HPA + PodDisruptionBudget
+  + ServiceMonitor, plus la ConfigMap/Secret partagee et les ressources Istio.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - firstpay
+  - payments
+  - cqrs
+  - kafka
+maintainers:
+  - name: FirstPay Platform Team

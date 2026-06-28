@@ -1,0 +1,64 @@
+# NOTE (Phase 9) : ce manifeste reste un exemple lisible "tout-en-un".
+# La source de verite deployable est desormais le chart Helm parametre :
+#   infrastructure/helm/firstpay  (Deployment + Service + HPA + PDB + ServiceMonitor + Istio)
+#   helm upgrade --install firstpay ./firstpay -n firstpay -f firstpay/values-prod.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+  labels: { app: transaction-service }
+spec:
+  replicas: 5
+  selector:
+    matchLabels: { app: transaction-service }
+  template:
+    metadata:
+      labels: { app: transaction-service }
+    spec:
+      containers:
+        - name: transaction-service
+          image: firstpay/transaction-service:latest
+          resources:
+            requests: { cpu: "1", memory: "1Gi" }
+            limits:   { cpu: "4", memory: "4Gi" }
+          env:
+            - name: JAVA_OPTS
+              value: "-XX:+UseZGC -XX:+ZGenerational -Xmx3g -Xms1g"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+          ports: [{ containerPort: 8080 }]
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            initialDelaySeconds: 30
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: transaction-service-pdb
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels: { app: transaction-service }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: transaction-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: transaction-service
+  minReplicas: 5
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 60 }
+    - type: Pods
+      pods:
+        metric: { name: transactions_per_second }
+        target: { type: AverageValue, averageValue: "2000" }

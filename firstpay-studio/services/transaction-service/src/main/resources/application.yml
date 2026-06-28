@@ -1,0 +1,114 @@
+spring:
+  application:
+    name: transaction-service
+
+  r2dbc:
+    url: ${DB_URL:r2dbc:pool:postgresql://localhost:6432/firstpay}
+    username: ${DB_USER:firstpay}
+    password: ${DB_PASS:dev_password}
+    pool:
+      initial-size: 20
+      max-size: 100
+      max-idle-time: 30m
+      validation-query: SELECT 1
+
+  # Flyway tourne sur une URL JDBC dédiée (migrations bloquantes au démarrage)
+  flyway:
+    url: ${JDBC_URL:jdbc:postgresql://localhost:5432/firstpay}
+    user: ${DB_USER:firstpay}
+    password: ${DB_PASS:dev_password}
+    locations: classpath:db/migration
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      acks: all
+      batch-size: 65536
+      properties:
+        linger.ms: 5
+        compression.type: lz4
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      group-id: transaction-processors
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 500
+
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+      timeout: 1000ms
+
+  threads:
+    virtual:
+      enabled: true            # Virtual threads (Java 21)
+
+firstpay:
+  outbox:
+    poll-ms: 500               # cadence du relais Outbox → Kafka
+  kafka:
+    replication-factor: 1      # 1 en local, 3 en production
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment-gateway:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        sliding-window-size: 100
+  ratelimiter:
+    instances:
+      transaction-api:
+        limit-for-period: 1000
+        limit-refresh-period: 1s
+        timeout-duration: 0
+  # Durcissement (Phase 9) : isole la concurrence (bulkhead) et borne le temps (timelimiter)
+  bulkhead:
+    instances:
+      transaction-api:
+        max-concurrent-calls: 200
+        max-wait-duration: 10ms
+  timelimiter:
+    instances:
+      transaction-api:
+        timeout-duration: 2s
+        cancel-running-future: true
+
+server:
+  port: 8080
+  # Backpressure : borne les connexions et le temps d'inactivité côté Netty
+  netty:
+    connection-timeout: 2s
+    idle-timeout: 30s
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 20ms,100ms,500ms
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:0.1}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

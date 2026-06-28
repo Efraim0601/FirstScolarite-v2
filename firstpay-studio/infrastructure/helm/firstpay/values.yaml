@@ -1,0 +1,86 @@
+# Valeurs par defaut (profil dev/local-k8s). Surchargees par values-staging.yaml
+# et values-prod.yaml via `helm upgrade -f`.
+
+global:
+  namespace: firstpay
+  imageRegistry: firstpay
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+  environment: dev
+  # Domaine public expose par l'Istio Gateway
+  domain: studio.local
+
+common:
+  springProfile: prod
+  # Echantillonnage du tracing : 10 % en prod (cf. ARCHITECTURE.md §7)
+  tracingSampleRate: "0.1"
+  otlpEndpoint: http://otel-collector.observability.svc:4318/v1/traces
+  # Variables d'infra partagees (ConfigMap). Les secrets vont dans `secrets`.
+  config:
+    KAFKA_BROKERS: kafka-headless.firstpay.svc:9092
+    REDIS_NODES: redis-cluster.firstpay.svc:6379
+    DB_URL: r2dbc:pool:postgresql://pgbouncer.firstpay.svc:6432/firstpay
+    READ_DB_URL: r2dbc:pool:postgresql://postgres-read.firstpay.svc:5432/firstpay
+    JDBC_URL: jdbc:postgresql://postgres-primary.firstpay.svc:5432/firstpay
+    FRONTEND_ORIGIN: https://studio.local
+
+# Secrets (a remplacer par Vault / SealedSecrets en prod ; jamais commiter les vraies valeurs)
+secrets:
+  create: true
+  data:
+    DB_USER: firstpay
+    DB_PASS: changeme
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+
+istio:
+  enabled: true
+  gatewayName: firstpay-gateway
+  mtls: STRICT
+
+# Reglages communs ; chaque service peut surcharger n'importe quelle cle.
+defaults:
+  minReplicas: 3
+  maxReplicas: 30
+  cpuTarget: 60
+  javaOpts: "-XX:+UseZGC -XX:+ZGenerational -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+  resources:
+    requests: { cpu: "500m", memory: "768Mi" }
+    limits: { cpu: "2", memory: "2Gi" }
+
+# Catalogue des services. `tpsTarget` active la metrique custom transactions_per_second.
+services:
+  - name: api-gateway
+    port: 8080
+    public: true
+    minReplicas: 3
+    maxReplicas: 40
+  - name: transaction-service
+    port: 8080
+    minReplicas: 5
+    maxReplicas: 50
+    cpuTarget: 60
+    tpsTarget: "2000"
+    javaOpts: "-XX:+UseZGC -XX:+ZGenerational -Xms1g -Xmx3g -XX:+ExitOnOutOfMemoryError"
+    resources:
+      requests: { cpu: "1", memory: "1Gi" }
+      limits: { cpu: "4", memory: "4Gi" }
+  - name: payment-service
+    port: 8080
+    minReplicas: 4
+    maxReplicas: 40
+    tpsTarget: "2000"
+    resources:
+      requests: { cpu: "1", memory: "1Gi" }
+      limits: { cpu: "3", memory: "3Gi" }
+  - name: partner-service
+    port: 8080
+    minReplicas: 2
+    maxReplicas: 12
+  - name: reporting-service
+    port: 8080
+    minReplicas: 3
+    maxReplicas: 20

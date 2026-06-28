@@ -1,0 +1,16 @@
+# Namespaces de la plateforme. `istio-injection: enabled` active le sidecar Envoy
+# (mTLS + telemetrie) sur tous les pods de "firstpay".
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: firstpay
+  labels:
+    istio-injection: enabled
+    app.kubernetes.io/part-of: firstpay-studio
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: firstpay-studio

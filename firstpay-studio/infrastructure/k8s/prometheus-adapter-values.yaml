@@ -1,0 +1,38 @@
+# Values pour le chart prometheus-community/prometheus-adapter.
+# Expose la métrique custom `transactions_per_second` (par pod) à l'API
+# custom.metrics.k8s.io, consommée par les HPA (type: Pods) du chart firstpay.
+#
+# Install :
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapter \
+#     -n monitoring -f infrastructure/k8s/prometheus-adapter-values.yaml
+#
+# Vérif :
+#   kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/firstpay/pods/*/transactions_per_second" | jq
+
+prometheus:
+  url: http://prometheus-server.monitoring.svc
+  port: 80
+
+rules:
+  default: false
+  custom:
+    # Débit de transactions par pod : dérivé du compteur Micrometer http.server.requests
+    # sur l'endpoint de création (POST /api/v1/transactions), moyenné par pod sur 1 min.
+    - seriesQuery: 'http_server_requests_seconds_count{namespace!="",pod!="",uri="/api/v1/transactions",method="POST"}'
+      resources:
+        overrides:
+          namespace: { resource: namespace }
+          pod: { resource: pod }
+      name:
+        matches: "^http_server_requests_seconds_count"
+        as: "transactions_per_second"
+      metricsQuery: 'sum(rate(http_server_requests_seconds_count{uri="/api/v1/transactions",method="POST",<<.LabelMatchers>>}[1m])) by (<<.GroupBy>>)'
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi

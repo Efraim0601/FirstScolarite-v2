@@ -1,0 +1,10 @@
+**/.git
+**/node_modules
+**/dist
+**/target
+**/.angular
+**/.idea
+**/.vscode
+**/surefire-reports
+**/*.md
+!README.md

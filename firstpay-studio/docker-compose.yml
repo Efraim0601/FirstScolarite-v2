@@ -1,0 +1,264 @@
+# Dev local complet : infra + microservices + frontend.
+# Ports HÔTE (10000–20000) → voir tableau ci-dessous. Les services communiquent
+# entre eux via les ports internes Docker (5432, 8080, etc.).
+#
+# | Service          | URL hôte              |
+# |------------------|-----------------------|
+# | Frontend         | http://localhost:14200 |
+# | API Gateway      | http://localhost:18080 |
+# | PostgreSQL       | localhost:15432        |
+# | PgBouncer        | localhost:16432        |
+# | Kafka            | localhost:19092        |
+# | Redis            | localhost:16379        |
+# | Grafana          | http://localhost:13000 |
+# | Prometheus       | http://localhost:19090 |
+# | Jaeger           | http://localhost:16686 |
+# | Alertmanager     | http://localhost:19093 |
+#
+# Démarrer l'infra seule :  docker compose up -d postgres pgbouncer kafka redis
+services:
+  postgres:
+    build: { context: ./infrastructure/postgresql, dockerfile: Dockerfile }
+    environment:
+      POSTGRES_DB: firstpay
+      POSTGRES_USER: firstpay
+      POSTGRES_PASSWORD: dev_password
+      # Autorise les connexions de réplication (streaming) depuis le standby.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      - hot_standby=on
+      - -c
+      - listen_addresses=*
+    ports: ["15432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgresql/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firstpay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Réplica en lecture (streaming replication réelle). Bootstrap via pg_basebackup au
+  # premier démarrage, puis démarre en hot standby. reporting-service lit ici (READ_DB_URL).
+  postgres-replica:
+    image: postgres:16-alpine
+    user: postgres
+    environment:
+      PGDATA: /var/lib/postgresql/data
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+          echo "Bootstrap du réplica via pg_basebackup..."
+          until pg_isready -h postgres -U firstpay; do echo "attente du primaire..."; sleep 2; done
+          rm -rf "$$PGDATA"/* || true
+          pg_basebackup -h postgres -p 5432 -U firstpay -D "$$PGDATA" -Fp -Xs -P -R
+          chmod 700 "$$PGDATA"
+        fi
+        exec postgres -c hot_standby=on
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firstpay"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DATABASE_URL: postgres://firstpay:dev_password@postgres:5432/firstpay
+    ports: ["16432:6432"]
+    volumes:
+      - ./infrastructure/postgresql/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_NUM_PARTITIONS: 12
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    ports: ["19092:9092"]
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports: ["16379:6379"]
+
+  # ---- Microservices (build local) ----
+  api-gateway:
+    build: { context: ., dockerfile: apps/api-gateway/Dockerfile }
+    ports: ["18080:8080"]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      REDIS_URL: redis://redis:6379
+      FRONTEND_ORIGIN: http://localhost:14200
+      JWT_SECRET: ${JWT_SECRET:-firstpay-dev-secret-change-me-please-32b}
+      PARTNER_SVC_URI: http://partner-service:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACING_SAMPLE_RATE: "1.0"
+    depends_on: [transaction-service, partner-service, redis]
+
+  transaction-service:
+    build: { context: ., dockerfile: services/transaction-service/Dockerfile }
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_USER: firstpay
+      DB_PASS: dev_password
+      DB_URL: r2dbc:postgresql://postgres:5432/firstpay
+      JDBC_URL: jdbc:postgresql://postgres:5432/firstpay
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACING_SAMPLE_RATE: "1.0"
+    depends_on: [pgbouncer, kafka, redis]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 120s
+
+  partner-service:
+    build: { context: ., dockerfile: services/partner-service/Dockerfile }
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_USER: firstpay
+      DB_PASS: dev_password
+      DB_URL: r2dbc:postgresql://postgres:5432/firstpay
+      JDBC_URL: jdbc:postgresql://postgres:5432/firstpay
+      KAFKA_BROKERS: kafka:9092
+      # baselineVersion=0 : schéma déjà peuplé par transaction-service, mais exécuter quand même V1+ partner
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "0"
+      JWT_SECRET: ${JWT_SECRET:-firstpay-dev-secret-change-me-please-32b}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACING_SAMPLE_RATE: "1.0"
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      kafka:
+        condition: service_started
+      transaction-service:
+        condition: service_healthy
+
+  payment-service:
+    build: { context: ., dockerfile: services/payment-service/Dockerfile }
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
+      PARTNER_SVC_URI: http://partner-service:8080
+      PAYMENT_WEBHOOK_BASE: ${PAYMENT_WEBHOOK_BASE:-http://localhost:18080/webhooks/trustpayway}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACING_SAMPLE_RATE: "1.0"
+    depends_on: [kafka, redis, partner-service]
+
+  reporting-service:
+    build: { context: ., dockerfile: services/reporting-service/Dockerfile }
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_USER: firstpay
+      DB_PASS: dev_password
+      # Écriture/Flyway sur le primaire ; lectures analytiques sur le réplica (séparation read/write).
+      DB_URL: r2dbc:postgresql://postgres:5432/firstpay
+      READ_DB_URL: r2dbc:postgresql://postgres:5432/firstpay
+      JDBC_URL: jdbc:postgresql://postgres:5432/firstpay
+      KAFKA_BROKERS: kafka:9092
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "0"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACING_SAMPLE_RATE: "1.0"
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      kafka:
+        condition: service_started
+      transaction-service:
+        condition: service_healthy
+      postgres-replica:
+        condition: service_started
+
+  frontend:
+    build: { context: ., dockerfile: apps/frontend/Dockerfile }
+    ports: ["14200:80"]
+    environment:
+      API_URL: http://api-gateway:8080
+    depends_on: [api-gateway]
+
+  # ---- Observabilité (Phase 9) : `docker compose up -d prometheus grafana jaeger otel-collector` ----
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.1
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./infrastructure/observability/otel-collector/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports: ["14317:4317", "14318:4318"]
+    depends_on: [jaeger]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686"]   # UI Jaeger
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    ports: ["19090:9090"]
+    depends_on: [alertmanager]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./infrastructure/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["19093:9093"]
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports: ["13000:3000"]   # UI Grafana (admin/admin)
+    depends_on: [prometheus]
+
+volumes:
+  postgres_data:
+  postgres_replica_data:
+  grafana_data:

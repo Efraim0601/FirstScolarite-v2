@@ -1,0 +1,45 @@
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  audit:
+    name: Dependency & secret hygiene
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firstpay-studio
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: firstpay-studio/apps/frontend/package-lock.json
+
+      - name: npm audit (frontend)
+        run: |
+          cd apps/frontend
+          npm ci --legacy-peer-deps
+          npm audit --audit-level=high || true
+
+      - name: Prettier check
+        run: |
+          cd apps/frontend
+          npx prettier --check "src/**/*.{ts,html,scss}" || true
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: firstpay-studio
+          severity: CRITICAL,HIGH
+          exit-code: '0'

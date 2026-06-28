@@ -1,0 +1,57 @@
+.shell { display: flex; min-height: 100vh; background: var(--bg); }
+
+.sidebar {
+  width: 232px; flex-shrink: 0; background: #fff;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  height: 100vh; position: sticky; top: 0;
+}
+.brand {
+  padding: 20px 18px 16px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.logo {
+  width: 38px; height: 38px; border-radius: 8px;
+  background: linear-gradient(135deg, #E53935, #C62828);
+  color: #fff; display: grid; place-items: center;
+  font-weight: 800; font-size: 14px; letter-spacing: .03em;
+  box-shadow: 0 4px 10px -3px rgba(229,57,53,.45);
+}
+.brand-name { font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+.brand-sub { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+
+nav { padding: 8px 10px; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 12px; margin: 2px 0; border-radius: 8px;
+  color: var(--text-2); font-size: 13.5px; font-weight: 500; cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.nav-item:hover { background: var(--bg); }
+.nav-item.active { background: var(--fp-red-50); color: var(--fp-red); font-weight: 600; }
+
+.foot { padding: 14px 18px 18px; border-top: 1px solid var(--border); }
+.foot-1 { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+.foot-2 { font-size: 13px; font-weight: 600; margin-top: 6px; }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  padding: 14px 28px; background: #fff; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.crumb-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.crumb-row { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.partner-badge { display: inline-flex; gap: 6px; font-weight: 600; font-size: 13px; }
+.role-badge { padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.imp-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 12px; border-radius: 999px; background: #FFF5F5; color: var(--fp-red-dark);
+  font-size: 12px; font-weight: 700;
+}
+.imp-badge button { border: none; background: var(--fp-red); color: #fff; border-radius: 6px; padding: 3px 8px; font-size: 11px; }
+
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.user { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.logout { border: 1px solid var(--border-strong); background: #fff; color: var(--text-2); border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 600; }
+
+.content { flex: 1; display: flex; min-height: 0; }

@@ -1,0 +1,96 @@
+# Overlay production — utiliser avec :
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Variables lues depuis .env (voir .env.production.example).
+# Seuls Caddy (80/443) est exposé publiquement.
+
+services:
+  postgres:
+    ports: []
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASS:?DB_PASS requis dans .env}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    restart: unless-stopped
+
+  postgres-replica:
+    restart: unless-stopped
+
+  pgbouncer:
+    ports: []
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-firstpay}:${DB_PASS}@postgres:5432/firstpay
+    restart: unless-stopped
+
+  kafka:
+    ports: []
+    restart: unless-stopped
+
+  redis:
+    ports: []
+    restart: unless-stopped
+
+  api-gateway:
+    ports: []
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://firstsign.afbdei.com}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis dans .env}
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
+    restart: unless-stopped
+
+  transaction-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_USER: ${DB_USER:-firstpay}
+      DB_PASS: ${DB_PASS}
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
+    restart: unless-stopped
+
+  partner-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_USER: ${DB_USER:-firstpay}
+      DB_PASS: ${DB_PASS}
+      JWT_SECRET: ${JWT_SECRET}
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
+    restart: unless-stopped
+
+  payment-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      PAYMENT_WEBHOOK_BASE: ${PAYMENT_WEBHOOK_BASE:-https://firstsign.afbdei.com/webhooks/trustpayway}
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
+    restart: unless-stopped
+
+  reporting-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_USER: ${DB_USER:-firstpay}
+      DB_PASS: ${DB_PASS}
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.05}
+    restart: unless-stopped
+
+  frontend:
+    ports: []
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - api-gateway
+      - payment-service
+    networks:
+      - default
+
+volumes:
+  caddy_data:
+  caddy_config:

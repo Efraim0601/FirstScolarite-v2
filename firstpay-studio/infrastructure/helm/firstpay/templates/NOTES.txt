@@ -1,0 +1,17 @@
+FirstPay Studio deploye dans le namespace "{{ .Values.global.namespace }}" (env: {{ .Values.global.environment }}).
+
+Services rendus :
+{{- range $svc := .Values.services }}
+  - {{ $svc.name }}  (replicas {{ $svc.minReplicas | default $.Values.defaults.minReplicas }} -> {{ $svc.maxReplicas | default $.Values.defaults.maxReplicas }})
+{{- end }}
+
+Verifier le rollout :
+  kubectl -n {{ .Values.global.namespace }} rollout status deploy/transaction-service
+  kubectl -n {{ .Values.global.namespace }} get hpa
+
+{{- if .Values.istio.enabled }}
+Ingress public : https://{{ .Values.global.domain }}/api/...
+{{- end }}
+
+Metriques : chaque service expose /actuator/prometheus (scrape via ServiceMonitor "release: prometheus").
+Tracing  : OTLP -> {{ .Values.common.otlpEndpoint }} (echantillonnage {{ .Values.common.tracingSampleRate }}).

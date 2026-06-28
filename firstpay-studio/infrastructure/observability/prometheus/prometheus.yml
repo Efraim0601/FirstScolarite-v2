@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    platform: firstpay-studio
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # Dev local (docker-compose) : cibles statiques par service.
+  - job_name: firstpay-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["api-gateway:8080"]
+        labels: { service: api-gateway }
+      - targets: ["transaction-service:8080"]
+        labels: { service: transaction-service }
+      - targets: ["payment-service:8080"]
+        labels: { service: payment-service }
+      - targets: ["partner-service:8080"]
+        labels: { service: partner-service }
+      - targets: ["reporting-service:8080"]
+        labels: { service: reporting-service }
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]

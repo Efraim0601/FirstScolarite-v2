@@ -1,0 +1,95 @@
+spring:
+  application:
+    name: api-gateway
+
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+
+  cloud:
+    gateway:
+      # CORS pour le portail Angular (frontend)
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins: ${FRONTEND_ORIGIN:http://localhost:4200}
+            allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+            allowed-headers: "*"
+            allow-credentials: true
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 5s
+        pool:
+          # Backpressure (Phase 9) : borne le pool de connexions sortantes par instance
+          type: fixed
+          max-connections: 2000
+          acquire-timeout: 2000
+          max-idle-time: 30s
+
+    # Découverte statique : résolution des uris lb://<service> (docker-compose / k8s)
+    discovery:
+      client:
+        simple:
+          instances:
+            transaction-service:
+              - uri: ${TRANSACTION_SVC_URI:http://transaction-service:8080}
+            partner-service:
+              - uri: ${PARTNER_SVC_URI:http://partner-service:8080}
+            reporting-service:
+              - uri: ${REPORTING_SVC_URI:http://reporting-service:8080}
+            payment-service:
+              - uri: ${PAYMENT_SVC_URI:http://payment-service:8080}
+
+server:
+  port: 8080
+  shutdown: graceful
+
+# Auth portail : secret JWT partagé avec partner-service (émetteur). À fournir via
+# variable d'env / secret en prod (jamais la valeur de dev).
+firstpay:
+  jwt:
+    secret: ${JWT_SECRET:firstpay-dev-secret-change-me-please-32b}
+    ttl-seconds: ${JWT_TTL_SECONDS:28800}
+  portal:
+    rate-limit-tpm: ${PORTAL_RATE_LIMIT_TPM:6000}
+  # Source de vérité des tenants (résolution API-key → tenant), avec repli in-memory.
+  partner-service:
+    url: ${PARTNER_SVC_URI:http://partner-service:8080}
+
+# Circuit breaker partagé (route transaction-cb)
+resilience4j:
+  circuitbreaker:
+    instances:
+      transaction-cb:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        sliding-window-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 20ms,100ms,500ms
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:0.1}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

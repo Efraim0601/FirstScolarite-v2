@@ -1,0 +1,20 @@
+{{- range $svc := .Values.services }}
+{{- $port := $svc.port | default 8080 }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    {{- include "firstpay.labels" (dict "ctx" $ "name" $svc.name) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "firstpay.selectorLabels" (dict "name" $svc.name) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $port }}
+      targetPort: {{ $port }}
+      protocol: TCP
+---
+{{- end }}

@@ -1,0 +1,52 @@
+{{- range $svc := .Values.services }}
+{{- $d := $.Values.defaults }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    {{- include "firstpay.labels" (dict "ctx" $ "name" $svc.name) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $svc.name }}
+  minReplicas: {{ $svc.minReplicas | default $d.minReplicas }}
+  maxReplicas: {{ $svc.maxReplicas | default $d.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.cpuTarget | default $d.cpuTarget }}
+    {{- if $svc.tpsTarget }}
+    # Metrique custom exposee par Micrometer puis pont par prometheus-adapter
+    - type: Pods
+      pods:
+        metric:
+          name: transactions_per_second
+        target:
+          type: AverageValue
+          averageValue: {{ $svc.tpsTarget | quote }}
+    {{- end }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 8
+          periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 60
+---
+{{- end }}

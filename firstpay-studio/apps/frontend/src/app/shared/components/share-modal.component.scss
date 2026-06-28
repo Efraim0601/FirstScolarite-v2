@@ -1,0 +1,24 @@
+.overlay { position: fixed; inset: 0; background: rgba(15,23,42,.4); display: grid; place-items: center; z-index: 1100; }
+.modal { background: #fff; border-radius: 16px; width: 460px; max-width: 92vw; box-shadow: var(--shadow-lg); overflow: hidden; }
+.head { padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-start; }
+.eyebrow { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+.name { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.x { border: none; background: var(--bg); width: 30px; height: 30px; border-radius: 8px; color: var(--text-2); }
+.tabs { display: flex; padding: 0 22px; border-bottom: 1px solid var(--border); gap: 4px; }
+.tab { padding: 11px 14px; border: none; background: none; font-weight: 600; font-size: 13px; color: var(--text-2); border-bottom: 2px solid transparent; }
+.tab.on { color: var(--fp-red); border-bottom-color: var(--fp-red); }
+
+.body { padding: 22px; }
+.lbl { font-size: 12px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 8px; }
+.lbl:first-child { margin-top: 0; }
+.url-box { display: flex; align-items: stretch; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; }
+.url { flex: 1; padding: 13px 14px; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.copy { border: none; background: var(--text); color: #fff; padding: 0 18px; font-weight: 600; font-size: 13px; }
+.channels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.channel { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: 10px; font-weight: 600; font-size: 13px; color: var(--text); }
+.ch-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.qr { width: 200px; height: 200px; border-radius: 12px; border: 1px solid var(--border); }
+.qr-cap { font-size: 12.5px; color: var(--text-3); }
+.ghost { padding: 9px 16px; border-radius: 9px; border: 1px solid var(--border-strong); background: #fff; color: var(--text-2); font-weight: 600; font-size: 13px; }

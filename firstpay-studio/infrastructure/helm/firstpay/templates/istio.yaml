@@ -1,0 +1,89 @@
+{{- if .Values.istio.enabled }}
+# --- mTLS strict intra-mesh (zero-trust entre services) ---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: firstpay-mtls
+  namespace: {{ .Values.global.namespace }}
+spec:
+  mtls:
+    mode: {{ .Values.istio.mtls }}
+---
+# --- Ingress Gateway : point d'entree HTTPS public ---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ .Values.istio.gatewayName }}
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: firstpay-tls-cert
+      hosts:
+        - {{ .Values.global.domain | quote }}
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - {{ .Values.global.domain | quote }}
+      tls:
+        httpsRedirect: true
+---
+# --- VirtualService : tout le trafic public -> api-gateway ---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: firstpay-routes
+  namespace: {{ .Values.global.namespace }}
+spec:
+  hosts:
+    - {{ .Values.global.domain | quote }}
+  gateways:
+    - {{ .Values.istio.gatewayName }}
+  http:
+    - match:
+        - uri: { prefix: /api/ }
+      route:
+        - destination:
+            host: api-gateway.{{ .Values.global.namespace }}.svc.cluster.local
+            port: { number: 8080 }
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: gateway-error,connect-failure,refused-stream
+      timeout: 10s
+{{- range $svc := .Values.services }}
+---
+# --- DestinationRule : pool de connexions + outlier detection (ejecte les instances KO) ---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $.Values.global.namespace }}
+spec:
+  host: {{ $svc.name }}.{{ $.Values.global.namespace }}.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 4096
+      http:
+        http2MaxRequests: 8192
+        maxRequestsPerConnection: 0
+        http1MaxPendingRequests: 4096
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 5s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    loadBalancer:
+      simple: LEAST_REQUEST
+{{- end }}
+{{- end }}

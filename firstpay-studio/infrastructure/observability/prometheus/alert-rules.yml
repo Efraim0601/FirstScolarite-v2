@@ -1,0 +1,83 @@
+# Alertes alignees sur les SLO d'ARCHITECTURE.md §1 et §7 :
+# P99 < 100 ms, taux d'erreur < 0.01 %, lag Kafka borne, dispo 99.99 %.
+groups:
+  - name: firstpay-slo
+    rules:
+      # --- Latence : P99 HTTP > 100 ms sur 5 min ---
+      - alert: HighLatencyP99
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(http_server_requests_seconds_bucket{uri!="/actuator/prometheus"}[5m]))
+            by (le, application)) > 0.1
+        for: 5m
+        labels: { severity: warning, slo: latency }
+        annotations:
+          summary: "P99 > 100 ms sur {{ $labels.application }}"
+          description: "La latence P99 de {{ $labels.application }} depasse 100 ms (SLO) depuis 5 min."
+
+      # --- Latence critique sous burst : P99 > 500 ms ---
+      - alert: CriticalLatencyP99
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(http_server_requests_seconds_bucket{uri!="/actuator/prometheus"}[5m]))
+            by (le, application)) > 0.5
+        for: 2m
+        labels: { severity: critical, slo: latency }
+        annotations:
+          summary: "P99 > 500 ms sur {{ $labels.application }}"
+          description: "Latence P99 critique (> 500 ms) — au-dela du seuil de burst (Phase 10)."
+
+      # --- Taux d'erreur 5xx > 1 % sur 5 min ---
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (application)
+          /
+          sum(rate(http_server_requests_seconds_count[5m])) by (application) > 0.01
+        for: 5m
+        labels: { severity: critical, slo: errors }
+        annotations:
+          summary: "Taux d'erreur 5xx > 1 % sur {{ $labels.application }}"
+          description: "{{ $labels.application }} renvoie plus de 1 % d'erreurs serveur."
+
+      # --- Disponibilite : instance down ---
+      - alert: ServiceDown
+        expr: up{job="firstpay-services"} == 0
+        for: 1m
+        labels: { severity: critical, slo: availability }
+        annotations:
+          summary: "Service {{ $labels.service }} injoignable"
+          description: "La cible {{ $labels.instance }} ne repond plus depuis 1 min."
+
+  - name: firstpay-kafka
+    rules:
+      # --- Lag consumer Kafka eleve (retard de traitement asynchrone) ---
+      - alert: KafkaConsumerLagHigh
+        expr: sum(kafka_consumer_fetch_manager_records_lag) by (application, client_id) > 50000
+        for: 5m
+        labels: { severity: warning, slo: throughput }
+        annotations:
+          summary: "Lag Kafka eleve ({{ $labels.application }})"
+          description: "Le lag consumer depasse 50k messages — le traitement asynchrone prend du retard."
+
+  - name: firstpay-runtime
+    rules:
+      # --- Circuit breaker ouvert (un PSP ou une dependance est en panne) ---
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 1m
+        labels: { severity: warning, slo: resilience }
+        annotations:
+          summary: "Circuit breaker OUVERT : {{ $labels.name }}"
+          description: "Le circuit {{ $labels.name }} sur {{ $labels.application }} est ouvert (dependance degradee)."
+
+      # --- Pression memoire JVM (> 90 % du heap) ---
+      - alert: JvmHeapPressure
+        expr: >
+          sum(jvm_memory_used_bytes{area="heap"}) by (application)
+          /
+          sum(jvm_memory_max_bytes{area="heap"}) by (application) > 0.9
+        for: 5m
+        labels: { severity: warning, slo: resilience }
+        annotations:
+          summary: "Heap JVM > 90 % sur {{ $labels.application }}"
+          description: "Risque de GC long / OOM sur {{ $labels.application }}."

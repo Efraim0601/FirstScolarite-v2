@@ -1,0 +1,25 @@
+# Généré par deploy-production.sh — ne pas éditer Caddyfile directement.
+# Template : infrastructure/caddy/Caddyfile.template
+
+{
+	email ${SSL_EMAIL}
+}
+
+firstsign.afbdei.com {
+	encode gzip zstd
+
+	# Webhooks TrustPayWay (payment-service)
+	handle /webhooks/* {
+		reverse_proxy payment-service:8080
+	}
+
+	# API REST (gateway)
+	handle /api/* {
+		reverse_proxy api-gateway:8080
+	}
+
+	# Application Angular (nginx)
+	handle {
+		reverse_proxy frontend:80
+	}
+}
