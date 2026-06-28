@@ -83,7 +83,7 @@ const EMPTY: PlatformSettings = {
               <input [ngModel]="s().aggAppId" (ngModelChange)="patch({ aggAppId: $event })" placeholder="b59325d6-21c2-4669-b7c8-8490a6673df7"></label>
 
             <label class="fld c2"><span>Secret (clé secrète) @if (s().aggSecretSet) { <em>(déjà défini)</em> }</span>
-              <input type="password" [ngModel]="s().aggSecret" (ngModelChange)="patch({ aggSecret: $event })" [placeholder]="s().aggSecretSet ? '•••••••• (laisser vide pour conserver)' : 'Secret obtenu à l\'inscription'"></label>
+              <input type="password" [ngModel]="s().aggSecret" (ngModelChange)="patch({ aggSecret: $event })" [placeholder]="s().aggSecretSet ? '•••••••• (laisser vide pour conserver)' : 'Secret obtenu à l’inscription'"></label>
           </div>
 
           <div class="note agg-note">
