@@ -6,6 +6,7 @@ import { AuthApiService } from '../../core/auth/auth-api.service';
 import { DEMO_ACCOUNTS, ROLES_CATALOG, Account, RoleId } from '../../core/auth/roles';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
 import { demoApiKeyForPartner, demoTenantIdForPartner } from '../../core/auth/api-keys';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'fp-login',
@@ -43,19 +44,21 @@ import { demoApiKeyForPartner, demoTenantIdForPartner } from '../../core/auth/ap
           <button class="submit" type="submit" [disabled]="loading() || !email()">{{ loading() ? 'Connexion…' : 'Se connecter' }}</button>
         </form>
 
-        <div class="sep"><span>Accès démo rapide</span></div>
-        <div class="accounts">
-          @for (acc of accounts; track acc.id) {
-            <button class="account" (click)="loginDemo(acc)">
-              <span class="dot" [style.background]="ROLES_CATALOG[acc.role].color"></span>
-              <span class="acc-main">
-                <span class="acc-name">{{ acc.name }}</span>
-                <span class="acc-role">{{ ROLES_CATALOG[acc.role].label }}</span>
-              </span>
-              <span class="acc-meta">{{ acc.partnerName || acc.agency }}</span>
-            </button>
-          }
-        </div>
+        @if (showDemoAccounts) {
+          <div class="sep"><span>Accès démo rapide</span></div>
+          <div class="accounts">
+            @for (acc of accounts; track acc.id) {
+              <button class="account" (click)="loginDemo(acc)">
+                <span class="dot" [style.background]="ROLES_CATALOG[acc.role].color"></span>
+                <span class="acc-main">
+                  <span class="acc-name">{{ acc.name }}</span>
+                  <span class="acc-role">{{ ROLES_CATALOG[acc.role].label }}</span>
+                </span>
+                <span class="acc-meta">{{ acc.partnerName || acc.agency }}</span>
+              </button>
+            }
+          </div>
+        }
       </div>
     </div>
   `,
@@ -67,6 +70,7 @@ export class LoginComponent {
   private readonly tenant = inject(TenantContextService);
   readonly accounts = DEMO_ACCOUNTS;
   readonly ROLES_CATALOG = ROLES_CATALOG;
+  readonly showDemoAccounts = environment.showDemoAccounts;
 
   readonly email = signal('');
   readonly password = signal('');
