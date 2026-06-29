@@ -38,8 +38,13 @@ echo "==> Frontend (HTTPS)"
 curl -sf -o /dev/null -w "HTTP %{http_code}\n" "${FRONTEND}/"
 
 echo "==> API accessible (HTTPS)"
-curl -sf -o /dev/null -w "HTTP %{http_code}\n" "${GATEWAY}/api/v1/auth/login" \
-  -X POST -H 'Content-Type: application/json' -d '{}' || echo "WARN: API pas encore joignable"
+API_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${GATEWAY}/api/v1/auth/login" \
+  -X POST -H 'Content-Type: application/json' -d '{}')
+if [[ "${API_CODE}" =~ ^(200|400|401)$ ]]; then
+  echo "HTTP ${API_CODE} (API joignable)"
+else
+  echo "WARN: API retourne HTTP ${API_CODE}"
+fi
 echo
 
 echo "==> Login partenaire démo (JWT)"
