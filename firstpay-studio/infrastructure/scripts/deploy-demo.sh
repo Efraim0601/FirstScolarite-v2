@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Déploiement RECETTE avec données seed Flyway (comptes démo, mot de passe « demo »).
-# N'utilise PAS les ports 80/443 → pas de conflit avec nginx/Caddy production.
+# Ports dédiés DISTINCTS de la prod → pas de conflit avec nginx/Caddy ni la stack prod.
 #
 # Usage :
 #   chmod +x infrastructure/scripts/deploy-demo.sh
 #   sudo ./infrastructure/scripts/deploy-demo.sh
 #
-# Accès :
-#   Frontend  http://<IP>:14200
-#   API       http://<IP>:18080
-#   Payeur    http://<IP>:14300
+# Accès (ports par défaut, surchargés par .env.demo) :
+#   Frontend  http://<IP>:24200
+#   API       http://<IP>:28080
+#   Payeur    http://<IP>:24300
 #
 # Comptes : admin.banque@afrilandfirstbank.com / demo (voir docs/DEPLOIEMENT.md)
 
@@ -46,6 +46,7 @@ ensure_env() {
   source .env.demo
   set +a
   export JWT_SECRET DB_PASS DB_USER INTERNAL_TOKEN DEMO_FRONTEND_ORIGIN DEMO_WEBHOOK_BASE
+  export DEMO_GATEWAY_PORT DEMO_FRONTEND_PORT DEMO_PAYER_PORT
 }
 
 install_docker_if_missing() {
@@ -87,9 +88,9 @@ post_info() {
 ╔══════════════════════════════════════════════════════════════════╗
 ║  FirstPay Studio — RECETTE (données seed)                        ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  Frontend : http://${PUBLIC_IP:-localhost}:14200
-║  API      : http://${PUBLIC_IP:-localhost}:18080
-║  Payeur   : http://${PUBLIC_IP:-localhost}:14300
+║  Frontend : http://${PUBLIC_IP:-localhost}:${DEMO_FRONTEND_PORT:-24200}
+║  API      : http://${PUBLIC_IP:-localhost}:${DEMO_GATEWAY_PORT:-28080}
+║  Payeur   : http://${PUBLIC_IP:-localhost}:${DEMO_PAYER_PORT:-24300}
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Connexion (mot de passe : demo)
 ║    Admin banque  : admin.banque@afrilandfirstbank.com
@@ -109,7 +110,7 @@ main() {
   ensure_env
   build_and_start
 
-  GATEWAY_URL="http://127.0.0.1:18080" FRONTEND_URL="http://127.0.0.1:14200" \
+  GATEWAY_URL="http://127.0.0.1:${DEMO_GATEWAY_PORT:-28080}" FRONTEND_URL="http://127.0.0.1:${DEMO_FRONTEND_PORT:-24200}" \
     infrastructure/scripts/verify-deployment.sh 2>/dev/null \
     || log "Smoke test partiel — réessayez verify-deployment.sh dans 1 min."
 
