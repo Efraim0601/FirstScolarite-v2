@@ -20,18 +20,10 @@ REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
 GIT_BRANCH="${GIT_BRANCH:-master}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/firstpay}"
 
-compose_files() {
-  echo "-f docker-compose.yml -f docker-compose.prod.yml"
-  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
-    echo "-f docker-compose.nginx-prod.yml"
-  fi
-}
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/compose-prod.sh"
 
-refresh_compose() {
-  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_files | tr '\n' ' ')"
-}
-
-refresh_compose
+refresh_compose_cmd
 
 log() { echo "[update] $*"; }
 die() { echo "[update] ERREUR: $*" >&2; exit 1; }
@@ -40,7 +32,7 @@ die() { echo "[update] ERREUR: $*" >&2; exit 1; }
 # shellcheck disable=SC1091
 set -a && source .env && set +a
 REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
-refresh_compose
+refresh_compose_cmd
 DOMAIN="${DOMAIN:-esign.afbdei.com}"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/lib/public-url.sh"
@@ -69,6 +61,7 @@ backup_database() {
     log "Sauvegarde ignorée (SKIP_BACKUP=1)"
     return 0
   fi
+  ensure_postgres_for_backup
   mkdir -p "${BACKUP_DIR}"
   STAMP=$(date +%Y%m%d_%H%M%S)
   FILE="${BACKUP_DIR}/firstpay_${STAMP}.sql.gz"
@@ -87,6 +80,7 @@ git_pull() {
   git fetch origin
   git checkout "${GIT_BRANCH}"
   git pull --ff-only origin "${GIT_BRANCH}"
+  refresh_compose_cmd
 }
 
 rebuild_stack() {
@@ -104,6 +98,8 @@ rebuild_stack() {
     sleep 15
     attempt=$((attempt + 1))
   done
+  stop_conflicting_stacks
+  verify_compose_port_bindings || die "Configuration Compose invalide (ports en double). Voir docker-compose.prod.yml."
   ensure_reverse_proxy_ports
   ${COMPOSE} up -d --remove-orphans
   log "Nettoyage des images Docker inutilisées…"

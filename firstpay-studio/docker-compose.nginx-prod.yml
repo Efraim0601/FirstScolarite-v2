@@ -9,15 +9,15 @@
 
 services:
   api-gateway:
-    ports:
+    ports: !override
       - "127.0.0.1:${NGINX_GATEWAY_PORT:-18080}:8080"
 
   frontend:
-    ports:
+    ports: !override
       - "127.0.0.1:${NGINX_FRONTEND_PORT:-14200}:80"
 
   payer-frontend:
-    ports:
+    ports: !override
       - "127.0.0.1:${NGINX_PAYER_PORT:-14300}:80"
 
   caddy:

@@ -2,33 +2,35 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Variables lues depuis .env (voir .env.production.example).
+# ports: !reset [] — obligatoire pour effacer les ports du docker-compose.yml de base
+# (sinon Compose les concatène et provoque « address already in use »).
 # Seul Caddy est exposé publiquement (ports configurables via CADDY_HTTP_PORT / CADDY_HTTPS_PORT).
 # Let's Encrypt HTTP-01 exige que CADDY_HTTP_PORT soit 80 sauf challenge DNS.
 
 services:
   postgres:
-    ports: []
+    ports: !reset []
     environment:
       POSTGRES_PASSWORD: ${DB_PASS:?DB_PASS requis dans .env}
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     restart: unless-stopped
 
   pgbouncer:
-    ports: []
+    ports: !reset []
     environment:
       DATABASE_URL: postgres://${DB_USER:-firstpay}:${DB_PASS}@postgres:5432/firstpay
     restart: unless-stopped
 
   kafka:
-    ports: []
+    ports: !reset []
     restart: unless-stopped
 
   redis:
-    ports: []
+    ports: !reset []
     restart: unless-stopped
 
   api-gateway:
-    ports: []
+    ports: !reset []
     environment:
       SPRING_PROFILES_ACTIVE: prod
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://esign.afbdei.com}
@@ -82,11 +84,11 @@ services:
     restart: unless-stopped
 
   frontend:
-    ports: []
+    ports: !reset []
     restart: unless-stopped
 
   payer-frontend:
-    ports: []
+    ports: !reset []
     restart: unless-stopped
 
   caddy:

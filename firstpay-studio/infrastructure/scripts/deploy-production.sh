@@ -29,18 +29,10 @@ SSL_EMAIL="${SSL_EMAIL:-admin@afbdei.com}"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
 REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
 
-compose_files() {
-  echo "-f docker-compose.yml -f docker-compose.prod.yml"
-  if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
-    echo "-f docker-compose.nginx-prod.yml"
-  fi
-}
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/compose-prod.sh"
 
-refresh_compose() {
-  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_files | tr '\n' ' ')"
-}
-
-refresh_compose
+refresh_compose_cmd
 
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] ERREUR: $*" >&2; exit 1; }
@@ -105,7 +97,7 @@ ensure_env_file() {
   else
     REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
   fi
-  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_files | tr '\n' ' ')"
+  COMPOSE="docker compose -p ${COMPOSE_PROJECT_NAME} $(compose_prod_file_args | tr '\n' ' ')"
   if [[ -z "${INTERNAL_TOKEN:-}" || "${INTERNAL_TOKEN}" == REMPLACER* ]]; then
     ITK=$(openssl rand -base64 32 | tr -d '\n')
     if grep -q '^INTERNAL_TOKEN=' .env 2>/dev/null; then
@@ -145,15 +137,6 @@ ensure_reverse_proxy_ports() {
   ensure_reverse_proxy_ports
 }
 
-stop_conflicting_stacks() {
-  if [[ "${STOP_DEMO_STACK:-1}" == "1" ]]; then
-    if docker compose -p firstpay-demo ps -q 2>/dev/null | grep -q .; then
-      log "Arrêt de la stack recette firstpay-demo (ports 14200/18080)…"
-      docker compose -p firstpay-demo -f docker-compose.yml -f docker-compose.demo.yml down 2>/dev/null || true
-    fi
-  fi
-}
-
 check_dns() {
   log "Vérification DNS pour ${DOMAIN}…"
   if command -v dig >/dev/null 2>&1; then
@@ -190,6 +173,7 @@ build_and_start() {
 
   log "Démarrage de la stack production (projet ${COMPOSE_PROJECT_NAME})…"
   stop_conflicting_stacks
+  verify_compose_port_bindings || die "Configuration Compose invalide (ports en double). Voir docker-compose.prod.yml."
   ensure_reverse_proxy_ports
   ${COMPOSE} up -d
 
@@ -208,11 +192,20 @@ build_and_start() {
 
 post_deploy_info() {
   local base="${PUBLIC_BASE_URL:-$(public_base_url 2>/dev/null || echo "https://${DOMAIN}")}"
-  local local_hint=""
+  local api_hint="" local_hint=""
   if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
     local_hint="
 ║  Docker (local) : http://127.0.0.1:${NGINX_FRONTEND_PORT:-14200}
 ║  Config nginx   : infrastructure/nginx/esign.afbdei.com.conf"
+    api_hint="
+║  Doc API (Swagger) : ${base}/swagger-ui/index.html
+║  Test login API    : curl -X POST ${base}/api/v1/auth/login \\
+║      -H 'Content-Type: application/json' \\
+║      -d '{\"email\":\"jospinleunou@softtech.cm\",\"password\":\"demo\"}'"
+  else
+    api_hint="
+║  Doc API (Swagger) : ${base}/swagger-ui/index.html
+║  ( /api/v1/ n'est pas une page web — utiliser Swagger ou curl )"
   fi
   cat <<EOF
 
@@ -220,9 +213,16 @@ post_deploy_info() {
 ║  FirstPay Studio — déploiement terminé                           ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Application : ${base}
-║  API         : ${base}/api/v1/
+${api_hint}
 ║  Webhooks    : ${base}/webhooks/trustpayway/{network}
 ${local_hint}
+╠══════════════════════════════════════════════════════════════════╣
+║  Connexion portail (mot de passe : demo)
+║    Admin banque    : admin.banque@afrilandfirstbank.com
+║    Caissière       : caisse.bonanjo@afrilandfirstbank.com
+║    Admin partenaire: jospinleunou@softtech.cm
+║    Gestionnaire    : marie.ngono@softtech.cm
+║    Comptable       : d.essomba@softtech.cm
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Vérification :
 ║    ./infrastructure/scripts/verify-production.sh

@@ -3,6 +3,20 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${PROJECT_ROOT}"
+
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
+if [[ -f .env ]]; then
+  # shellcheck disable=SC1091
+  set -a && source .env && set +a
+fi
+REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/compose-prod.sh"
+refresh_compose_cmd
+
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/lib/public-url.sh"
 
@@ -39,8 +53,14 @@ else
   echo "WARN: login démo échoué (normal si données démo purgées en prod opérationnelle)"
 fi
 
+if [[ "${REVERSE_PROXY}" == "nginx" ]]; then
+  echo "==> Gateway local (nginx hôte)"
+  curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+    "http://127.0.0.1:${NGINX_GATEWAY_PORT:-18080}/actuator/health" \
+    || echo "WARN: gateway local inaccessible sur 127.0.0.1:${NGINX_GATEWAY_PORT:-18080}"
+fi
+
 echo "==> Conteneurs actifs"
-  ${COMPOSE} ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null \
-  || docker compose -p firstpay-studio -f docker-compose.yml -f docker-compose.prod.yml ps
+${COMPOSE} ps --format "table {{.Name}}\t{{.Status}}"
 
 echo "==> Smoke test production terminé"

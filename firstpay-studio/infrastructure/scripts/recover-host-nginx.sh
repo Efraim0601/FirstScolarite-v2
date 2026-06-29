@@ -19,6 +19,10 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-firstpay-studio}"
+REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/compose-prod.sh"
 
 log() { echo "[recover-nginx] $*"; }
 die() { echo "[recover-nginx] ERREUR: $*" >&2; exit 1; }
@@ -34,10 +38,8 @@ show_ports() {
 
 stop_compose_caddy() {
   command -v docker >/dev/null 2>&1 || return 0
-  local files="-f docker-compose.yml -f docker-compose.prod.yml"
-  if [[ -f docker-compose.nginx-prod.yml ]]; then
-    files="${files} -f docker-compose.nginx-prod.yml"
-  fi
+  local files
+  files="$(compose_prod_file_args | tr '\n' ' ')"
   if docker compose -p "${COMPOSE_PROJECT}" ${files} ps -q caddy 2>/dev/null | grep -q .; then
     log "Arrêt du conteneur Caddy (projet ${COMPOSE_PROJECT})…"
     docker compose -p "${COMPOSE_PROJECT}" ${files} stop caddy 2>/dev/null || true
