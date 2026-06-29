@@ -43,6 +43,20 @@ public class GatewayConfig {
             .route("reporting-service", r -> r.path("/api/v1/reports/**")
                 .filters(f -> f.filter(tenantFilter).filter(rateLimitFilter))
                 .uri("lb://reporting-service"))
+            // Documentation OpenAPI : expose le /v3/api-docs de chaque service à travers
+            // la gateway (consommé par le Swagger UI agrégé). Pas de filtre tenant/API-key.
+            .route("partner-docs", r -> r.path("/v3/api-docs/partner-service")
+                .filters(f -> f.rewritePath("/v3/api-docs/partner-service", "/v3/api-docs"))
+                .uri("lb://partner-service"))
+            .route("transaction-docs", r -> r.path("/v3/api-docs/transaction-service")
+                .filters(f -> f.rewritePath("/v3/api-docs/transaction-service", "/v3/api-docs"))
+                .uri("lb://transaction-service"))
+            .route("payment-docs", r -> r.path("/v3/api-docs/payment-service")
+                .filters(f -> f.rewritePath("/v3/api-docs/payment-service", "/v3/api-docs"))
+                .uri("lb://payment-service"))
+            .route("reporting-docs", r -> r.path("/v3/api-docs/reporting-service")
+                .filters(f -> f.rewritePath("/v3/api-docs/reporting-service", "/v3/api-docs"))
+                .uri("lb://reporting-service"))
             .build();
     }
 }

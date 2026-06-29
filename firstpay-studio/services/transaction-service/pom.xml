@@ -20,6 +20,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-webflux</artifactId>
     </dependency>
+    <!-- OpenAPI : génère /v3/api-docs (agrégé par la gateway) -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webflux-api</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
     <!-- Validation (@Valid sur les DTO) -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

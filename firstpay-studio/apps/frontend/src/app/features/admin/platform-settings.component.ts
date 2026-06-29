@@ -137,10 +137,11 @@ export class PlatformSettingsComponent implements OnInit {
 
   sendTest() {
     this.testing.set(true); this.msg.set('');
-    this.api.test(this.testTo()).subscribe((res) => {
+    this.api.test(this.s(), this.testTo()).subscribe((res) => {
       this.testing.set(false);
       if (res?.sent) this.flash('Email de test envoyé ✓', true);
-      else this.flash("Test non envoyé (SMTP non configuré/joignable).", false);
+      else if (res?.error) this.flash('Test non envoyé : ' + res.error, false);
+      else this.flash('Test non envoyé (backend injoignable).', false);
     });
   }
 

@@ -555,11 +555,11 @@ nano .env
 Variables importantes :
 
 ```bash
-DOMAIN=firstsign.afbdei.com
+DOMAIN=esignafbdei.com
 SSL_EMAIL=admin@afbdei.com          # Let's Encrypt
 JWT_SECRET=...                         # ≥ 32 caractères
 DB_PASS=...                            # PostgreSQL
-FRONTEND_ORIGIN=https://firstsign.afbdei.com
+FRONTEND_ORIGIN=https://esignafbdei.com
 PAYMENT_WEBHOOK_BASE=https://firstsign.afbdei.com/webhooks/trustpayway
 ```
 
@@ -572,7 +572,7 @@ cd /opt/firstpay-studio
 sudo ./infrastructure/scripts/verify-production.sh
 
 # Test manuel navigateur
-# → https://firstsign.afbdei.com
+# → https://esignafbdei.com
 # → Connexion admin banque : admin.banque@afrilandfirstbank.com / demo
 
 # Test API

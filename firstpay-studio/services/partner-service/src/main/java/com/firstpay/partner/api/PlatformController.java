@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -42,11 +43,20 @@ public class PlatformController {
 
     @PostMapping("/test")
     public Mono<Map<String, Object>> test(@RequestHeader(value = "X-User-Role", required = false) String role,
-                                          @RequestBody Map<String, String> body) {
+                                          @RequestBody TestEmailRequest body) {
         requireBankAdmin(role);
-        String to = body.getOrDefault("to", "");
-        return email.sendTest(to).map(ok -> Map.of("sent", ok));
+        String to = body.to() == null ? "" : body.to();
+        return email.sendTest(body.settings(), to)
+            .map(r -> {
+                Map<String, Object> out = new HashMap<>();
+                out.put("sent", r.sent());
+                if (r.error() != null) out.put("error", r.error());
+                return out;
+            });
     }
+
+    /** Corps du test SMTP : la config en cours d'édition (non encore enregistrée) + le destinataire. */
+    public record TestEmailRequest(PlatformSettingsDto settings, String to) {}
 
     private void requireBankAdmin(String role) {
         if (!"bank_admin".equals(role)) {

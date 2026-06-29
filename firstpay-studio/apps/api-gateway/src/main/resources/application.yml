@@ -96,3 +96,21 @@ management:
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Documentation OpenAPI agrégée — Swagger UI sur /swagger-ui.html avec un menu
+# déroulant par microservice. Désactivable en prod via SWAGGER_ENABLED=false.
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+    path: /swagger-ui.html
+    urls:
+      - name: partner-service
+        url: /v3/api-docs/partner-service
+      - name: transaction-service
+        url: /v3/api-docs/transaction-service
+      - name: payment-service
+        url: /v3/api-docs/payment-service
+      - name: reporting-service
+        url: /v3/api-docs/reporting-service

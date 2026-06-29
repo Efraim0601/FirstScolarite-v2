@@ -57,19 +57,58 @@ public class EmailService {
         });
     }
 
-    /** Envoi d'un email de test (vérifie la configuration SMTP). */
-    public Mono<Boolean> sendTest(String toEmail) {
-        return platform.getRaw().flatMap(cfg -> {
-            if (!cfg.smtpEnabled() || cfg.smtpHost() == null || cfg.smtpHost().isBlank()) {
-                return Mono.just(false);
+    /** Résultat d'un test SMTP : succès + message d'erreur réel en cas d'échec (affiché à l'admin). */
+    public record TestResult(boolean sent, String error) {}
+
+    /**
+     * Envoi d'un email de test à partir de la config du <b>formulaire</b> (permet de tester avant
+     * d'enregistrer). Les secrets vides du formulaire sont complétés par ceux stockés (l'UI ne
+     * renvoie pas le mot de passe en clair). Renvoie la cause réelle en cas d'échec.
+     */
+    public Mono<TestResult> sendTest(PlatformSettingsDto form, String toEmail) {
+        if (toEmail == null || toEmail.isBlank()) {
+            return Mono.just(new TestResult(false, "Adresse de destination manquante."));
+        }
+        return platform.getRaw().flatMap(stored -> {
+            PlatformSettingsDto cfg = mergeSecrets(form, stored);
+            if (!cfg.smtpEnabled()) return Mono.just(new TestResult(false, "L'envoi d'emails est désactivé."));
+            if (cfg.smtpHost() == null || cfg.smtpHost().isBlank()) {
+                return Mono.just(new TestResult(false, "Hôte SMTP non renseigné."));
             }
             return Mono.fromCallable(() -> {
                     send(cfg, toEmail, "Test SMTP FirstPay",
                         "Ceci est un email de test envoyé depuis le portail FirstPay. Votre configuration SMTP fonctionne.");
-                    return true;
+                    return new TestResult(true, null);
                 }).subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(e -> { log.warn("Test SMTP échoué : {}", e.getMessage()); return Mono.just(false); });
+                .onErrorResume(e -> {
+                    String reason = rootMessage(e);
+                    log.warn("Test SMTP échoué : {}", reason);
+                    return Mono.just(new TestResult(false, reason));
+                });
         });
+    }
+
+    /** Complète les secrets vides du formulaire par ceux déjà stockés (mot de passe non renvoyé par l'UI). */
+    private static PlatformSettingsDto mergeSecrets(PlatformSettingsDto form, PlatformSettingsDto stored) {
+        if (form == null) return stored;
+        String pwd = (form.smtpPassword() == null || form.smtpPassword().isBlank())
+            ? stored.smtpPassword() : form.smtpPassword();
+        return new PlatformSettingsDto(
+            form.smtpHost(), form.smtpPort(), form.smtpUsername(), pwd,
+            form.smtpFromEmail(), form.smtpFromName(), form.smtpUseTls(), form.smtpEnabled(),
+            form.appBaseUrl(), false,
+            form.aggEnabled(), form.aggBaseUrl(), form.aggAppId(), form.aggSecret(), false);
+    }
+
+    /** Message le plus informatif de la chaîne d'exceptions (ex. réponse 535 d'Office 365). */
+    private static String rootMessage(Throwable e) {
+        Throwable cur = e;
+        String msg = e.getMessage();
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+            if (cur.getMessage() != null && !cur.getMessage().isBlank()) msg = cur.getMessage();
+        }
+        return msg == null || msg.isBlank() ? e.getClass().getSimpleName() : msg.trim();
     }
 
     private void send(PlatformSettingsDto cfg, String to, String subject, String body) {

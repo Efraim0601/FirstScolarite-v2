@@ -35,7 +35,10 @@ export class PlatformApiService {
     return this.http.put<PlatformSettings>(this.base, settings).pipe(catchError(() => of(null)));
   }
 
-  test(to: string): Observable<{ sent: boolean } | null> {
-    return this.http.post<{ sent: boolean }>(`${this.base}/test`, { to }).pipe(catchError(() => of(null)));
+  /** Teste la config en cours d'édition (envoyée telle quelle) — pas besoin d'enregistrer d'abord. */
+  test(settings: PlatformSettings, to: string): Observable<{ sent: boolean; error?: string } | null> {
+    return this.http
+      .post<{ sent: boolean; error?: string }>(`${this.base}/test`, { settings, to })
+      .pipe(catchError(() => of(null)));
   }
 }
