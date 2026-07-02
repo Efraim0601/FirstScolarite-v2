@@ -7,6 +7,7 @@ import { ShareModalComponent } from '../../shared/components/share-modal.compone
 import { StudioStore } from './studio.store';
 import { PaymentInterface } from '../../core/models/interface.model';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
+import { payHost } from '../../shared/pay-url';
 
 @Component({
   selector: 'fp-studio',
@@ -32,7 +33,7 @@ import { TenantContextService } from '../../core/tenant/tenant-context.service';
                 <span class="d-name">{{ it.name }}</span>
                 <fp-status-badge [status]="it.status" />
               </div>
-              <div class="d-url mono">pay.firstpay.cm/{{ partner().shortCode }}/{{ it.slug }}</div>
+              <div class="d-url mono">{{ payHost }}/{{ partner().shortCode }}/{{ it.slug }}</div>
             </div>
             <button class="edit-btn" (click)="store.openEditor(it.id)">✎ Modifier l'interface</button>
           </div>
@@ -73,7 +74,7 @@ import { TenantContextService } from '../../core/tenant/tenant-context.service';
 
       @if (shareTarget(); as st) {
         <fp-share-modal
-          [url]="'pay.firstpay.cm/' + partner().shortCode + '/' + st.slug"
+          [url]="payHost + '/' + partner().shortCode + '/' + st.slug"
           [name]="st.name" [partnerName]="partner().name"
           (close)="shareTarget.set(null)" />
       }
@@ -103,6 +104,7 @@ export class StudioComponent {
   private readonly tenant = inject(TenantContextService);
   readonly Math = Math;
   readonly partner = computed(() => this.tenant.partner()!);
+  readonly payHost = payHost();
   readonly toast = signal<string | null>(null);
   readonly shareTarget = signal<PaymentInterface | null>(null);
   readonly publishPreview = signal(false);

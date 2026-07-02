@@ -4,6 +4,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { StudioStore } from './studio.store';
 import { PaymentPreviewComponent } from './payment-preview.component';
 import { TenantContextService } from '../../core/tenant/tenant-context.service';
+import { payHost } from '../../shared/pay-url';
 import {
   AmountType, CustomField, Method, METHOD_LABELS, PaymentInterface, Preset,
 } from '../../core/models/interface.model';
@@ -54,7 +55,7 @@ const METHODS: Method[] = ['orange', 'mtn', 'card', 'transfer'];
                     @for (s of sectors; track s) { <option [value]="s">{{ s }}</option> }
                   </select></label>
                 <label class="fld"><span>Lien personnalisé</span>
-                  <div class="slug"><span class="slug-pre mono">pay.firstpay.cm/{{ partner().shortCode }}/</span>
+                  <div class="slug"><span class="slug-pre mono">{{ payHost }}/{{ partner().shortCode }}/</span>
                     <input class="mono" [ngModel]="d.customSlug" (ngModelChange)="patch({ customSlug: $event })" placeholder="mon-lien"></div></label>
               }
 
@@ -151,7 +152,7 @@ const METHODS: Method[] = ['orange', 'mtn', 'card', 'transfer'];
                 }
                 <div class="publish-url">
                   <div class="pu-lbl">URL publique</div>
-                  <div class="pu-val mono">pay.firstpay.cm/{{ partner().shortCode }}/{{ d.customSlug || slugPreview() }}</div>
+                  <div class="pu-val mono">{{ payHost }}/{{ partner().shortCode }}/{{ d.customSlug || slugPreview() }}</div>
                 </div>
               }
             }
@@ -194,6 +195,7 @@ export class EditorComponent {
 
   readonly data = this.store.editing;
   readonly partner = computed(() => this.tenant.partner()!);
+  readonly payHost = payHost();
   readonly current = signal(0);
   readonly steps = STEPS;
   readonly sectors = SECTORS;

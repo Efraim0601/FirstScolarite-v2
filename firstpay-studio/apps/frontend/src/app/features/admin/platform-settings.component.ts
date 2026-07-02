@@ -55,7 +55,7 @@ const EMPTY: PlatformSettings = {
             </label>
 
             <label class="fld c2"><span>URL de l'application (envoyée aux partenaires)</span>
-              <input [ngModel]="s().appBaseUrl" (ngModelChange)="patch({ appBaseUrl: $event })" placeholder="https://pay.firstpay.cm"></label>
+              <input [ngModel]="s().appBaseUrl" (ngModelChange)="patch({ appBaseUrl: $event })" placeholder="https://esign.afbdei.com"></label>
           </div>
 
           <div class="actions smtp-actions">
